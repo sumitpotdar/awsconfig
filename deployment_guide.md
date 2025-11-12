@@ -1,3 +1,7 @@
+<img width="1039" height="584" alt="image" src="https://github.com/user-attachments/assets/ddf3120c-a856-4513-838c-9f203e00c8d8" />
+
+
+
 # AWS Config Multi-Account Deployment Guide
 
 ## Prerequisites
