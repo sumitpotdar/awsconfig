@@ -1,0 +1,332 @@
+# AWS Config Centralized Compliance Architecture Design
+# Version: 1.0
+# Last Updated: November 2025
+
+## 1. ARCHITECTURE OVERVIEW
+
+### 1.1 Environment Details
+- Non-Production: 32 accounts → 1 Management Account
+- Production: 13 accounts → 1 Management Account  
+- Regions: 2 regions per environment (e.g., us-east-1, us-west-2)
+- Total Config Aggregators: 2 (1 per management account)
+
+### 1.2 Architecture Principles
+- Centralized compliance visibility
+- Automated remediation
+- Separation of Prod/Non-Prod
+- Multi-region support
+- Least privilege access
+- Cost optimization
+
+## 2. COMPONENT ARCHITECTURE
+
+### 2.1 Member Accounts (45 accounts)
+Each member account contains:
+```
+┌─────────────────────────────────────────┐
+│          Member Account                  │
+│  ┌────────────────────────────────────┐ │
+│  │       AWS Config Service           │ │
+│  │  - Configuration Recorder          │ │
+│  │  - Delivery Channel                │ │
+│  │  - Config Rules (Managed/Custom)   │ │
+│  └────────────────────────────────────┘ │
+│                  │                       │
+│                  ▼                       │
+│  ┌────────────────────────────────────┐ │
+│  │     AWS Config S3 Bucket           │ │
+│  │  (Local account, cross-region)     │ │
+│  └────────────────────────────────────┘ │
+│                  │                       │
+│                  ▼                       │
+│  ┌────────────────────────────────────┐ │
+│  │   Remediation Lambda Functions     │ │
+│  │  - EBS Encryption Remediation      │ │
+│  │  - Security Group Remediation      │ │
+│  │  - RDS Encryption Remediation      │ │
+│  └────────────────────────────────────┘ │
+│                  │                       │
+│                  ▼                       │
+│  ┌────────────────────────────────────┐ │
+│  │      SNS Topic (Notifications)     │ │
+│  └────────────────────────────────────┘ │
+└─────────────────────────────────────────┘
+```
+
+### 2.2 Management Accounts (2 accounts)
+```
+┌──────────────────────────────────────────────┐
+│     Management Account (Prod/Non-Prod)       │
+│  ┌─────────────────────────────────────────┐│
+│  │      AWS Config Aggregator              ││
+│  │  - Aggregates from all member accounts  ││
+│  │  - Multi-region aggregation             ││
+│  └─────────────────────────────────────────┘│
+│                    │                         │
+│                    ▼                         │
+│  ┌─────────────────────────────────────────┐│
+│  │   Centralized S3 Bucket                 ││
+│  │  - All config snapshots                 ││
+│  │  - Lifecycle policies (90 days)         ││
+│  │  - Encryption enabled                   ││
+│  └─────────────────────────────────────────┘│
+│                    │                         │
+│                    ▼                         │
+│  ┌─────────────────────────────────────────┐│
+│  │   CloudWatch Dashboard                  ││
+│  │  - Compliance metrics                   ││
+│  │  - Account-level views                  ││
+│  └─────────────────────────────────────────┘│
+│                    │                         │
+│                    ▼                         │
+│  ┌─────────────────────────────────────────┐│
+│  │   SNS Topic (Aggregated Alerts)        ││
+│  │  - Email subscriptions                  ││
+│  │  - Slack/Teams integration              ││
+│  └─────────────────────────────────────────┘│
+└──────────────────────────────────────────────┘
+```
+
+## 3. AWS CONFIG RULES SPECIFICATION
+
+### 3.1 EBS Volume Encryption
+**Rule Name**: encrypted-volumes
+**Type**: AWS Managed Rule
+**Resource**: AWS::EC2::Volume
+**Trigger**: Configuration changes
+**Auto-Remediation**: Yes
+
+**Remediation Action**:
+1. Create snapshot of unencrypted volume
+2. Create encrypted volume from snapshot
+3. Attach to instance (if detached volume)
+4. Tag as remediated
+
+### 3.2 Security Group - Open SSH/RDP
+**Rule Name**: restricted-ssh-rdp
+**Type**: AWS Managed Rule (restricted-ssh / restricted-common-ports)
+**Resource**: AWS::EC2::SecurityGroup
+**Trigger**: Configuration changes
+**Auto-Remediation**: Yes
+
+**Remediation Action**:
+1. Identify rules with 0.0.0.0/0 for ports 22, 3389
+2. Remove offending ingress rules
+3. Log action to CloudWatch
+4. Send SNS notification
+
+### 3.3 RDS Encryption at Rest
+**Rule Name**: rds-storage-encrypted
+**Type**: AWS Managed Rule
+**Resource**: AWS::RDS::DBInstance
+**Trigger**: Configuration changes
+**Auto-Remediation**: Partial (requires snapshot restore)
+
+**Remediation Action**:
+1. Create snapshot of unencrypted DB
+2. Copy snapshot with encryption enabled
+3. Tag for manual restore (cannot automate without downtime)
+
+### 3.4 RDS Encryption in Transit
+**Rule Name**: rds-ssl-enabled
+**Type**: Custom Config Rule
+**Resource**: AWS::RDS::DBInstance
+**Trigger**: Configuration changes
+**Auto-Remediation**: Yes
+
+**Remediation Action**:
+1. Modify DB parameter group
+2. Set require_secure_transport = 1 (MySQL/MariaDB)
+3. Set rds.force_ssl = 1 (PostgreSQL)
+4. Apply parameter group change
+
+## 4. DATA FLOW
+
+### 4.1 Configuration Recording Flow
+```
+Resource Change → Config Recorder → S3 Bucket → Config Aggregator
+                       ↓
+                  Config Rule Evaluation
+                       ↓
+              [Compliant / Non-Compliant]
+                       ↓
+           [If Non-Compliant + Auto-Remediate]
+                       ↓
+              Lambda Remediation Function
+                       ↓
+              Resource Remediated → SNS Alert
+```
+
+### 4.2 Aggregation Flow
+```
+Member Account (Region 1) ──┐
+Member Account (Region 2) ──┼──→ Config Aggregator ──→ S3 ──→ Dashboard
+    ... (45 accounts)      ──┘     (Management)
+```
+
+## 5. IAM ROLES AND PERMISSIONS
+
+### 5.1 AWS Config Service Role (Each Account)
+```
+Role Name: AWSConfigRole
+Policies:
+  - AWS_ConfigRole (AWS Managed)
+  - Custom policy for S3 write access
+  - SNS publish permissions
+```
+
+### 5.2 Remediation Lambda Execution Role
+```
+Role Name: ConfigRemediationLambdaRole
+Policies:
+  - CloudWatch Logs write
+  - EC2 (for EBS/SG remediation)
+  - RDS (for RDS remediation)
+  - Config read access
+  - SNS publish
+```
+
+### 5.3 Config Aggregator Role (Management Accounts)
+```
+Role Name: AWSConfigAggregatorRole
+Policies:
+  - AWSConfigRoleForOrganizations (AWS Managed)
+  - S3 read access across accounts
+```
+
+## 6. S3 BUCKET STRATEGY
+
+### 6.1 Member Account Buckets
+```
+Bucket Name: aws-config-<account-id>-<region>
+Encryption: AES-256 or KMS
+Lifecycle: 
+  - Transition to IA after 30 days
+  - Delete after 90 days
+Replication: To management account bucket (optional)
+```
+
+### 6.2 Management Account Central Bucket
+```
+Bucket Name: aws-config-aggregator-<env>-<account-id>
+Encryption: KMS
+Lifecycle:
+  - Transition to Glacier after 90 days
+  - Delete after 365 days
+Cross-Account Access: From all member accounts
+```
+
+## 7. DEPLOYMENT STRATEGY
+
+### 7.1 Phase 1: Management Account Setup (Week 1)
+1. Deploy aggregator in management accounts
+2. Create central S3 buckets
+3. Configure SNS topics
+4. Setup CloudWatch dashboards
+
+### 7.2 Phase 2: Member Account Config (Week 2-3)
+1. Deploy Config using StackSets
+2. Enable configuration recorders
+3. Deploy baseline Config rules (no remediation)
+4. Verify aggregation working
+
+### 7.3 Phase 3: Remediation Deployment (Week 4)
+1. Deploy Lambda functions via StackSets
+2. Enable auto-remediation on rules
+3. Test remediation in non-prod
+4. Gradual rollout to production
+
+### 7.4 Phase 4: Monitoring & Optimization (Week 5)
+1. Configure CloudWatch alarms
+2. Setup compliance reports
+3. Cost optimization review
+4. Documentation completion
+
+## 8. MONITORING AND ALERTING
+
+### 8.1 CloudWatch Metrics
+- ConfigurationRecordersSuccessfullyDelivered
+- ConfigurationRecordersFailedToDeliver
+- ConfigRulesCompliance (per rule)
+- ConfigRulesNonCompliantResources
+
+### 8.2 SNS Alert Triggers
+- Non-compliant resources detected
+- Remediation actions executed
+- Remediation failures
+- Config recorder failures
+
+### 8.3 Dashboard Components
+- Compliance score by account
+- Compliance score by rule
+- Remediation success rate
+- Cost per account
+
+## 9. COST ESTIMATION
+
+### 9.1 Per Account (Monthly)
+- Config Rules: $2.00/rule × 4 rules = $8.00
+- Configuration Items: ~$0.003 per item (~200 items) = $0.60
+- Lambda Executions: ~$0.20
+- S3 Storage: ~$2.00
+- **Total per account: ~$11/month**
+
+### 9.2 Total Environment Cost
+- Non-Prod (32 accounts): $352/month
+- Prod (13 accounts): $143/month
+- Management Accounts: $100/month
+- **Total: ~$595/month**
+
+## 10. SECURITY CONSIDERATIONS
+
+### 10.1 Encryption
+- All S3 buckets encrypted with KMS
+- SNS topics encrypted
+- Lambda environment variables encrypted
+
+### 10.2 Access Control
+- Least privilege IAM policies
+- Cross-account roles with conditions
+- S3 bucket policies restricting access
+- CloudTrail logging all Config API calls
+
+### 10.3 Compliance
+- Supports SOC 2, PCI-DSS, HIPAA
+- Audit trail in CloudTrail
+- Config timeline for resource changes
+- Automated compliance reporting
+
+## 11. DISASTER RECOVERY
+
+### 11.1 Backup Strategy
+- CloudFormation templates in Git
+- S3 bucket versioning enabled
+- Cross-region S3 replication for critical data
+
+### 11.2 Recovery Procedures
+- Re-deploy using StackSets
+- Config data persisted in S3
+- RPO: 24 hours
+- RTO: 4 hours
+
+## 12. OPERATIONAL RUNBOOK
+
+### 12.1 Adding New Accounts
+1. Add account to StackSet targets
+2. Deploy base Config stack
+3. Verify aggregation
+4. Enable auto-remediation
+
+### 12.2 Adding New Rules
+1. Update CloudFormation template
+2. Test in non-prod management account
+3. Deploy via StackSet update
+4. Monitor for 24 hours
+5. Enable auto-remediation
+
+### 12.3 Troubleshooting
+- Check Config recorder status
+- Review Lambda CloudWatch logs
+- Verify IAM permissions
+- Check S3 bucket policies
+- Review aggregator authorization
