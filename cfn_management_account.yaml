@@ -1,0 +1,308 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS Config Aggregator and Central Resources for Management Account'
+
+Parameters:
+  Environment:
+    Type: String
+    Description: Environment name (prod or nonprod)
+    AllowedValues:
+      - prod
+      - nonprod
+    Default: nonprod
+  
+  OrganizationId:
+    Type: String
+    Description: AWS Organization ID
+    Default: o-xxxxxxxxxx
+  
+  AggregatorRegions:
+    Type: CommaDelimitedList
+    Description: List of regions to aggregate
+    Default: us-east-1,us-west-2
+  
+  AlertEmail:
+    Type: String
+    Description: Email for compliance alerts
+    Default: aws-compliance@company.com
+
+Resources:
+  # ===========================
+  # S3 Bucket for Aggregated Config Data
+  # ===========================
+  ConfigAggregatorBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'aws-config-aggregator-${Environment}-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt ConfigKMSKey.Arn
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: TransitionToGlacier
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 90
+                StorageClass: GLACIER
+          - Id: DeleteOldData
+            Status: Enabled
+            ExpirationInDays: 365
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Purpose
+          Value: AWSConfigAggregator
+        - Key: Environment
+          Value: !Ref Environment
+
+  ConfigAggregatorBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ConfigAggregatorBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSConfigBucketPermissionsCheck
+            Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt ConfigAggregatorBucket.Arn
+            Condition:
+              StringEquals:
+                aws:SourceOrgID: !Ref OrganizationId
+          - Sid: AWSConfigBucketExistenceCheck
+            Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: s3:ListBucket
+            Resource: !GetAtt ConfigAggregatorBucket.Arn
+            Condition:
+              StringEquals:
+                aws:SourceOrgID: !Ref OrganizationId
+          - Sid: AWSConfigBucketPutObject
+            Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${ConfigAggregatorBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                aws:SourceOrgID: !Ref OrganizationId
+
+  # ===========================
+  # KMS Key for Encryption
+  # ===========================
+  ConfigKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for AWS Config encryption
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow Config to use the key
+            Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:SourceOrgID: !Ref OrganizationId
+          - Sid: Allow SNS to use the key
+            Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: '*'
+
+  ConfigKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/config-${Environment}'
+      TargetKeyId: !Ref ConfigKMSKey
+
+  # ===========================
+  # SNS Topic for Alerts
+  # ===========================
+  ConfigComplianceTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'aws-config-compliance-${Environment}'
+      DisplayName: AWS Config Compliance Alerts
+      KmsMasterKeyId: !Ref ConfigKMSKey
+      Subscription:
+        - Endpoint: !Ref AlertEmail
+          Protocol: email
+
+  ConfigComplianceTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ConfigComplianceTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowConfigPublish
+            Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref ConfigComplianceTopic
+            Condition:
+              StringEquals:
+                aws:SourceOrgID: !Ref OrganizationId
+
+  # ===========================
+  # IAM Role for Config Aggregator
+  # ===========================
+  ConfigAggregatorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'AWSConfigAggregatorRole-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSConfigRoleForOrganizations
+      Policies:
+        - PolicyName: ConfigAggregatorS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ConfigAggregatorBucket.Arn
+                  - !Sub '${ConfigAggregatorBucket.Arn}/*'
+
+  # ===========================
+  # AWS Config Aggregator
+  # ===========================
+  ConfigurationAggregator:
+    Type: AWS::Config::ConfigurationAggregator
+    DependsOn: ConfigAggregatorRole
+    Properties:
+      ConfigurationAggregatorName: !Sub '${Environment}-aggregator'
+      OrganizationAggregationSource:
+        RoleArn: !GetAtt ConfigAggregatorRole.Arn
+        AllAwsRegions: false
+        AwsRegions: !Ref AggregatorRegions
+
+  # ===========================
+  # CloudWatch Dashboard
+  # ===========================
+  ComplianceDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub 'AWSConfig-${Environment}-Compliance'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [ "AWS/Config", "ComplianceScore", { "stat": "Average" } ]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "Overall Compliance Score",
+                "yAxis": {
+                  "left": {
+                    "min": 0,
+                    "max": 100
+                  }
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [ "AWS/Config", "NonCompliantResources", { "stat": "Sum" } ]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "Non-Compliant Resources"
+              }
+            }
+          ]
+        }
+
+  # ===========================
+  # CloudWatch Alarms
+  # ===========================
+  HighNonComplianceAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${Environment}-high-noncompliance'
+      AlarmDescription: Alert when non-compliant resources exceed threshold
+      MetricName: NonCompliantResources
+      Namespace: AWS/Config
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref ConfigComplianceTopic
+      TreatMissingData: notBreaching
+
+Outputs:
+  ConfigAggregatorBucketName:
+    Description: S3 bucket for aggregated config data
+    Value: !Ref ConfigAggregatorBucket
+    Export:
+      Name: !Sub '${Environment}-ConfigAggregatorBucket'
+
+  ConfigAggregatorBucketArn:
+    Description: ARN of the aggregator S3 bucket
+    Value: !GetAtt ConfigAggregatorBucket.Arn
+    Export:
+      Name: !Sub '${Environment}-ConfigAggregatorBucketArn'
+
+  ConfigComplianceTopicArn:
+    Description: SNS topic for compliance alerts
+    Value: !Ref ConfigComplianceTopic
+    Export:
+      Name: !Sub '${Environment}-ConfigComplianceTopic'
+
+  ConfigKMSKeyId:
+    Description: KMS key for Config encryption
+    Value: !Ref ConfigKMSKey
+    Export:
+      Name: !Sub '${Environment}-ConfigKMSKey'
+
+  ConfigAggregatorName:
+    Description: Name of the Config aggregator
+    Value: !Ref ConfigurationAggregator
+
+  DashboardURL:
+    Description: CloudWatch Dashboard URL
+    Value: !Sub 'https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${ComplianceDashboard}'
