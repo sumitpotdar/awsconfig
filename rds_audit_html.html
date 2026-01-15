@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RDS Security Audit Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen p-6">
+        <div class="max-w-7xl mx-auto">
+            <!-- Header -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-800">RDS Security Audit Dashboard</h1>
+                            <p class="text-gray-600">Monitor encryption and security configurations</p>
+                        </div>
+                    </div>
+                    <button id="exportBtn" class="hidden items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        Export Report
+                    </button>
+                </div>
+
+                <!-- Controls -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                        <input 
+                            type="password" 
+                            id="apiKey" 
+                            placeholder="Enter API Key" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tag Key</label>
+                        <select id="tagKey" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="app_id">app_id</option>
+                            <option value="Environment">Environment</option>
+                            <option value="Application">Application</option>
+                            <option value="Team">Team</option>
+                            <option value="CostCenter">CostCenter</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tag Value (app_id)</label>
+                        <input 
+                            type="text" 
+                            id="tagValue" 
+                            placeholder="Enter app_id (e.g., APP001)" 
+                            value="APP001"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            list="tagSuggestions"
+                        />
+                        <datalist id="tagSuggestions">
+                            <option value="APP001">
+                            <option value="APP002">
+                            <option value="APP123">
+                            <option value="web-app-prod">
+                            <option value="api-service-01">
+                        </datalist>
+                    </div>
+                    <div class="flex items-end">
+                        <button id="scanBtn" class="w-full flex items-center justify-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                            <svg id="scanIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            <span id="scanText">Scan</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="filterInfo" class="hidden mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p class="text-sm text-blue-800">
+                        <span class="font-semibold">Filter:</span> Scanning RDS instances tagged with 
+                        <span id="filterText" class="font-mono bg-blue-100 px-2 py-1 rounded"></span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div id="summaryCards" class="hidden grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                        </svg>
+                        <span class="text-gray-600 text-sm">Total Instances</span>
+                    </div>
+                    <p id="totalInstances" class="text-2xl font-bold text-gray-800">0</p>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                        <span class="text-gray-600 text-sm">Encrypted at Rest</span>
+                    </div>
+                    <p id="encryptedAtRest" class="text-2xl font-bold text-gray-800">0</p>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        <span class="text-gray-600 text-sm">In-Transit SSL</span>
+                    </div>
+                    <p id="inTransitSSL" class="text-2xl font-bold text-gray-800">0</p>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        <span class="text-gray-600 text-sm">Public Access</span>
+                    </div>
+                    <p id="publicAccess" class="text-2xl font-bold text-gray-800">0</p>
+                </div>
+            </div>
+
+            <!-- Instance Cards Container -->
+            <div id="instancesContainer" class="space-y-4"></div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="bg-white rounded-lg shadow-md p-12 text-center">
+                <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                </svg>
+                <p class="text-gray-600 text-lg">No instances scanned yet</p>
+                <p class="text-gray-500 text-sm mt-2">Click "Scan RDS Instances" to begin audit</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let instances = [];
+
+        const tagSuggestions = {
+            'app_id': ['APP001', 'APP002', 'APP123', 'web-app-prod', 'api-service-01', 'analytics-db-prod'],
+            'Environment': ['Production', 'Development', 'Staging', 'QA'],
+            'Application': ['WebApp', 'API', 'Analytics', 'Reporting'],
+            'Team': ['Engineering', 'DevOps', 'DataScience'],
+            'CostCenter': ['CC-001', 'CC-002', 'CC-003']
+        };
+
+        // Update suggestions when tag key changes
+        document.getElementById('tagKey').addEventListener('change', function() {
+            const datalist = document.getElementById('tagSuggestions');
+            datalist.innerHTML = '';
+            const suggestions = tagSuggestions[this.value] || [];
+            suggestions.forEach(value => {
+                const option = document.createElement('option');
+                option.value = value;
+                datalist.appendChild(option);
+            });
+        });
+
+        // Scan button handler
+        document.getElementById('scanBtn').addEventListener('click', async function() {
+            const apiKey = document.getElementById('apiKey').value;
+            const tagKey = document.getElementById('tagKey').value;
+            const tagValue = document.getElementById('tagValue').value;
+
+            if (!apiKey) {
+                alert('Please enter API Key');
+                return;
+            }
+
+            if (!tagKey || !tagValue) {
+                alert('Please enter both tag key and value');
+                return;
+            }
+
+            // Show loading state
+            this.disabled = true;
+            document.getElementById('scanText').textContent = 'Scanning...';
+            document.getElementById('scanIcon').classList.add('animate-spin');
+
+            // Update filter info
+            document.getElementById('filterInfo').classList.remove('hidden');
+            document.getElementById('filterText').textContent = `${tagKey}=${tagValue}`;
+
+            // Call your API Gateway endpoint
+            try {
+                // REPLACE THIS URL with your actual API Gateway endpoint
+                const API_ENDPOINT = 'https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/prod/scan';
+                
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': apiKey  // API Key in header
+                    },
+                    body: JSON.stringify({
+                        tagKey: tagKey,
+                        tagValue: tagValue
+                    })
+                });
+
+                if (response.status === 403) {
+                    alert('Invalid API Key. Please check your API key and try again.');
+                    this.disabled = false;
+                    document.getElementById('scanText').textContent = 'Scan';
+                    document.getElementById('scanIcon').classList.remove('animate-spin');
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status} - ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                instances = data.instances || [];
+
+                if (instances.length === 0) {
+                    alert(`No RDS instances found with tag ${tagKey}=${tagValue}`);
+                }
+            } catch (error) {
+                console.error('Error calling API:', error);
+                alert(`Error: ${error.message}. Check console for details.`);
+                
+                // Show sample data note
+                if (confirm('Would you like to see sample data for demonstration?')) {
+                    instances = [
+                    {
+                        id: 'rds-prod-001',
+                        name: 'production-db',
+                        engine: 'postgres',
+                        version: '14.7',
+                        region: 'us-east-1',
+                        tags: { 'app_id': 'APP001', 'Environment': 'Production' },
+                        encryption: { atRest: true, inTransit: true, kmsKeyId: 'arn:aws:kms:us-east-1:123456789012:key/abc123' },
+                        backups: { automated: true, encrypted: true, retentionDays: 7 },
+                        network: { publiclyAccessible: false, vpcId: 'vpc-12345', securityGroups: ['sg-prod-db'] },
+                        authentication: { iamEnabled: true, passwordRotation: true },
+                        monitoring: { enhancedMonitoring: true, performanceInsights: true }
+                    },
+                    {
+                        id: 'rds-prod-002',
+                        name: 'analytics-db',
+                        engine: 'mysql',
+                        version: '8.0.32',
+                        region: 'us-west-2',
+                        tags: { 'app_id': 'APP001', 'Application': 'Analytics' },
+                        encryption: { atRest: false, inTransit: true, kmsKeyId: null },
+                        backups: { automated: true, encrypted: false, retentionDays: 3 },
+                        network: { publiclyAccessible: true, vpcId: 'vpc-67890', securityGroups: ['sg-analytics'] },
+                        authentication: { iamEnabled: false, passwordRotation: false },
+                        monitoring: { enhancedMonitoring: false, performanceInsights: true }
+                    },
+                    {
+                        id: 'rds-prod-003',
+                        name: 'reporting-db',
+                        engine: 'postgres',
+                        version: '15.2',
+                        region: 'eu-west-1',
+                        tags: { 'app_id': 'APP001', 'Team': 'DataScience' },
+                        encryption: { atRest: true, inTransit: false, kmsKeyId: 'arn:aws:kms:eu-west-1:123456789012:key/xyz789' },
+                        backups: { automated: false, encrypted: true, retentionDays: 1 },
+                        network: { publiclyAccessible: false, vpcId: 'vpc-54321', securityGroups: ['sg-reporting'] },
+                        authentication: { iamEnabled: true, passwordRotation: false },
+                        monitoring: { enhancedMonitoring: true, performanceInsights: false }
+                    }
+                ];
+                } else {
+                    this.disabled = false;
+                    document.getElementById('scanText').textContent = 'Scan';
+                    document.getElementById('scanIcon').classList.remove('animate-spin');
+                    return;
+                }
+            }
+
+            renderInstances();
+
+            // Reset button state
+            this.disabled = false;
+            document.getElementById('scanText').textContent = 'Scan RDS Instances';
+            document.getElementById('scanIcon').classList.remove('animate-spin');
+        });
+
+        // Export button handler
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            const csv = [
+                ['Name', 'ID', 'Engine', 'Region', 'At-Rest Encryption', 'In-Transit Encryption', 'Public Access', 'IAM Auth', 'Security Score'].join(','),
+                ...instances.map(inst => [
+                    inst.name,
+                    inst.id,
+                    inst.engine,
+                    inst.region,
+                    inst.encryption.atRest ? 'Enabled' : 'Disabled',
+                    inst.encryption.inTransit ? 'Enabled' : 'Disabled',
+                    inst.network.publiclyAccessible ? 'Yes (Risk!)' : 'No',
+                    inst.authentication.iamEnabled ? 'Enabled' : 'Disabled',
+                    calculateSecurityScore(inst) + '%'
+                ].join(','))
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `rds-security-audit-${Date.now()}.csv`;
+            a.click();
+        });
+
+        function calculateSecurityScore(instance) {
+            const checks = [
+                instance.encryption.atRest,
+                instance.encryption.inTransit,
+                instance.backups.encrypted,
+                !instance.network.publiclyAccessible,
+                instance.authentication.iamEnabled,
+                instance.monitoring.enhancedMonitoring,
+                instance.backups.automated
+            ];
+            const score = checks.filter(Boolean).length;
+            return Math.round((score / checks.length) * 100);
+        }
+
+        function getScoreColor(score) {
+            if (score >= 80) return 'text-green-600';
+            if (score >= 60) return 'text-yellow-600';
+            return 'text-red-600';
+        }
+
+        function renderInstances() {
+            const container = document.getElementById('instancesContainer');
+            const emptyState = document.getElementById('emptyState');
+            const summaryCards = document.getElementById('summaryCards');
+            const exportBtn = document.getElementById('exportBtn');
+
+            if (instances.length === 0) {
+                emptyState.classList.remove('hidden');
+                summaryCards.classList.add('hidden');
+                exportBtn.classList.add('hidden');
+                container.innerHTML = '';
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            summaryCards.classList.remove('hidden');
+            exportBtn.classList.remove('hidden');
+            exportBtn.classList.add('flex');
+
+            // Update summary
+            document.getElementById('totalInstances').textContent = instances.length;
+            document.getElementById('encryptedAtRest').textContent = instances.filter(i => i.encryption.atRest).length;
+            document.getElementById('inTransitSSL').textContent = instances.filter(i => i.encryption.inTransit).length;
+            document.getElementById('publicAccess').textContent = instances.filter(i => i.network.publiclyAccessible).length;
+
+            // Render instance cards
+            container.innerHTML = instances.map(instance => {
+                const score = calculateSecurityScore(instance);
+                const scoreColor = getScoreColor(score);
+
+                return `
+                    <div class="bg-white rounded-lg shadow-md p-6">
+                        <div class="flex items-start justify-between mb-4">
+                            <div>
+                                <h3 class="text-xl font-semibold text-gray-800">${instance.name}</h3>
+                                <p class="text-gray-600 text-sm">${instance.id}</p>
+                                <p class="text-gray-500 text-sm mt-1">${instance.engine} ${instance.version} • ${instance.region}</p>
+                                <div class="flex flex-wrap gap-2 mt-2">
+                                    ${Object.entries(instance.tags).map(([key, value]) => 
+                                        `<span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">${key}: ${value}</span>`
+                                    ).join('')}
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm text-gray-600 mb-1">Security Score</p>
+                                <p class="text-3xl font-bold ${scoreColor}">${score}%</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <!-- Encryption -->
+                            <div>
+                                <h4 class="font-semibold text-gray-700 mb-3">🔒 Encryption</h4>
+                                <div class="space-y-2">
+                                    ${statusBadge(instance.encryption.atRest, 'At Rest')}
+                                    ${statusBadge(instance.encryption.inTransit, 'In Transit (SSL/TLS)')}
+                                    ${instance.encryption.kmsKeyId ? `<p class="text-xs text-gray-500 mt-2">KMS: ${instance.encryption.kmsKeyId.split('/').pop()}</p>` : ''}
+                                </div>
+                            </div>
+
+                            <!-- Backups -->
+                            <div>
+                                <h4 class="font-semibold text-gray-700 mb-3">💾 Backups</h4>
+                                <div class="space-y-2">
+                                    ${statusBadge(instance.backups.automated, 'Automated')}
+                                    ${statusBadge(instance.backups.encrypted, 'Encrypted')}
+                                    <p class="text-sm text-gray-600">Retention: ${instance.backups.retentionDays} days</p>
+                                </div>
+                            </div>
+
+                            <!-- Network -->
+                            <div>
+                                <h4 class="font-semibold text-gray-700 mb-3">🌐 Network</h4>
+                                <div class="space-y-2">
+                                    ${statusBadge(!instance.network.publiclyAccessible, instance.network.publiclyAccessible ? 'Publicly Accessible ⚠️' : 'Private')}
+                                    <p class="text-xs text-gray-500">VPC: ${instance.network.vpcId}</p>
+                                    <p class="text-xs text-gray-500">SG: ${instance.network.securityGroups.join(', ')}</p>
+                                </div>
+                            </div>
+
+                            <!-- Authentication -->
+                            <div>
+                                <h4 class="font-semibold text-gray-700 mb-3">🔑 Authentication</h4>
+                                <div class="space-y-2">
+                                    ${statusBadge(instance.authentication.iamEnabled, 'IAM Database Auth')}
+                                    ${statusBadge(instance.authentication.passwordRotation, 'Password Rotation')}
+                                </div>
+                            </div>
+
+                            <!-- Monitoring -->
+                            <div>
+                                <h4 class="font-semibold text-gray-700 mb-3">📊 Monitoring</h4>
+                                <div class="space-y-2">
+                                    ${statusBadge(instance.monitoring.enhancedMonitoring, 'Enhanced Monitoring')}
+                                    ${statusBadge(instance.monitoring.performanceInsights, 'Performance Insights')}
+                                </div>
+                            </div>
+                        </div>
+
+                        ${score < 100 ? `
+                            <div class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <p class="text-sm font-semibold text-yellow-800 mb-2">Recommendations:</p>
+                                <ul class="text-sm text-yellow-700 space-y-1">
+                                    ${!instance.encryption.atRest ? '<li>• Enable encryption at rest</li>' : ''}
+                                    ${!instance.encryption.inTransit ? '<li>• Enable SSL/TLS for in-transit encryption</li>' : ''}
+                                    ${instance.network.publiclyAccessible ? '<li>• Remove public accessibility</li>' : ''}
+                                    ${!instance.authentication.iamEnabled ? '<li>• Enable IAM database authentication</li>' : ''}
+                                    ${!instance.backups.encrypted ? '<li>• Enable backup encryption</li>' : ''}
+                                    ${!instance.backups.automated ? '<li>• Enable automated backups</li>' : ''}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function statusBadge(enabled, label) {
+            const icon = enabled 
+                ? '<svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
+                : '<svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+            const color = enabled ? 'text-green-700' : 'text-red-700';
+            return `
+                <div class="flex items-center gap-2">
+                    ${icon}
+                    <span class="${color}">${label}</span>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
