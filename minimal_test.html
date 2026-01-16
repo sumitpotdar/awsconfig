@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minimal API Test</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 50px auto; padding: 20px; }
+        input, button { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; font-size: 16px; }
+        button:hover { background: #0056b3; }
+        pre { background: #f4f4f4; padding: 15px; overflow-x: auto; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Minimal API Test</h1>
+    
+    <label>API Endpoint:</label>
+    <input type="text" id="endpoint" placeholder="https://abc123.execute-api.us-east-1.amazonaws.com/prod/scan">
+    
+    <label>API Key:</label>
+    <input type="password" id="apikey" placeholder="Your API Key">
+    
+    <button onclick="testAPI()">Test Connection</button>
+    
+    <h2>Results:</h2>
+    <div id="output"></div>
+
+    <script>
+        async function testAPI() {
+            const endpoint = document.getElementById('endpoint').value.trim();
+            const apiKey = document.getElementById('apikey').value.trim();
+            const output = document.getElementById('output');
+            
+            if (!endpoint || !apiKey) {
+                output.innerHTML = '<p class="error">Please enter both endpoint and API key</p>';
+                return;
+            }
+            
+            output.innerHTML = '<p>Testing... Please wait...</p>';
+            
+            try {
+                // Exactly what Postman does
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': apiKey
+                    },
+                    body: JSON.stringify({
+                        tagKey: 'app_id',
+                        tagValue: 'APP001'
+                    })
+                });
+                
+                // Get response details
+                const responseText = await response.text();
+                let responseData;
+                try {
+                    responseData = JSON.parse(responseText);
+                } catch (e) {
+                    responseData = responseText;
+                }
+                
+                // Show results
+                let html = '<h3>Response Details:</h3>';
+                html += '<p><strong>Status:</strong> ' + response.status + ' ' + response.statusText + '</p>';
+                
+                // Show headers
+                html += '<p><strong>Headers:</strong></p><pre>';
+                response.headers.forEach((value, key) => {
+                    html += key + ': ' + value + '\n';
+                });
+                html += '</pre>';
+                
+                // Show body
+                html += '<p><strong>Body:</strong></p>';
+                html += '<pre>' + JSON.stringify(responseData, null, 2) + '</pre>';
+                
+                if (response.ok) {
+                    html = '<p class="success">✅ SUCCESS!</p>' + html;
+                } else {
+                    html = '<p class="error">❌ ERROR</p>' + html;
+                }
+                
+                // Check for CORS headers
+                const corsHeader = response.headers.get('access-control-allow-origin');
+                if (!corsHeader) {
+                    html += '<p class="error">⚠️ WARNING: Missing CORS header (access-control-allow-origin)</p>';
+                    html += '<p>This will cause issues in browsers. Enable CORS in API Gateway!</p>';
+                } else {
+                    html += '<p class="success">✅ CORS header present: ' + corsHeader + '</p>';
+                }
+                
+                output.innerHTML = html;
+                
+            } catch (error) {
+                let html = '<p class="error">❌ FAILED</p>';
+                html += '<p><strong>Error:</strong> ' + error.message + '</p>';
+                html += '<p><strong>Error Type:</strong> ' + error.name + '</p>';
+                
+                // Specific error messages
+                if (error.name === 'TypeError' && error.message.toLowerCase().includes('fetch')) {
+                    html += '<hr>';
+                    html += '<h3>❌ This is a CORS Error!</h3>';
+                    html += '<p>Your browser blocked the request because:</p>';
+                    html += '<ol>';
+                    html += '<li>CORS is not enabled in API Gateway, OR</li>';
+                    html += '<li>You enabled CORS but did not DEPLOY the API, OR</li>';
+                    html += '<li>Your API is PRIVATE (only accessible from VPC)</li>';
+                    html += '</ol>';
+                    html += '<h4>How to Fix:</h4>';
+                    html += '<ol>';
+                    html += '<li>Go to API Gateway Console</li>';
+                    html += '<li>Select /scan resource</li>';
+                    html += '<li>Actions → Enable CORS</li>';
+                    html += '<li><strong>Actions → Deploy API → prod</strong> (CRITICAL!)</li>';
+                    html += '</ol>';
+                }
+                
+                output.innerHTML = html;
+                console.error('Full error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
