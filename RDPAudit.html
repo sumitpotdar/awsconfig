@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RDS Audit Client</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        label { display: block; margin-top: 10px; }
+        input { padding: 5px; width: 300px; }
+        button { margin-top: 15px; padding: 8px 16px; }
+        pre { background: #f4f4f4; padding: 10px; margin-top: 20px; max-width: 800px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h2>RDS Audit via API Gateway</h2>
+
+    <label>
+        Tag Key:
+        <input type="text" id="tagKey" value="app_id">
+    </label>
+
+    <label>
+        Tag Value:
+        <input type="text" id="tagValue" placeholder="Enter tag value">
+    </label>
+
+    <button onclick="fetchRdsData()">Fetch RDS Instances</button>
+
+    <h3>Response</h3>
+    <pre id="responseOutput"></pre>
+
+    <script>
+        const API_URL = "https://YOUR_API_GATEWAY_URL/prod/rds-audit"; // update path if needed
+        const API_KEY = "YOUR_API_KEY"; // replace with your API key
+
+        async function fetchRdsData() {
+            const tagKey = document.getElementById('tagKey').value.trim();
+            const tagValue = document.getElementById('tagValue').value.trim();
+            const output = document.getElementById('responseOutput');
+
+            if (!tagValue) {
+                output.textContent = "Error: tagValue is required.";
+                return;
+            }
+
+            const payload = {
+                tagKey: tagKey || 'app_id',
+                tagValue: tagValue
+            };
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': API_KEY
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const text = await response.text();
+                let data;
+
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    data = { raw: text };
+                }
+
+                output.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                output.textContent = "Request failed: " + error;
+            }
+        }
+    </script>
+</body>
+</html>
