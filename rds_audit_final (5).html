@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RDS Security Audit Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+    <div class="min-h-screen p-4 md:p-6">
+        <div class="max-w-7xl mx-auto">
+            <!-- Header -->
+            <div class="bg-white rounded-xl shadow-lg p-6 mb-6 fade-in">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-4">
+                        <div class="bg-blue-600 p-3 rounded-lg">
+                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 class="text-2xl md:text-3xl font-bold text-gray-800">RDS Security Audit Dashboard</h1>
+                            <p class="text-gray-600 mt-1">Monitor encryption and security configurations across your RDS instances</p>
+                        </div>
+                    </div>
+                    <button id="exportBtn" class="hidden items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-md">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        <span class="hidden md:inline">Export Report</span>
+                    </button>
+                </div>
+
+                <!-- Configuration Form -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Tag Key</label>
+                        <select id="tagKey" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                            <option value="app_id">app_id</option>
+                            <option value="Environment">Environment</option>
+                            <option value="Application">Application</option>
+                            <option value="Team">Team</option>
+                            <option value="CostCenter">CostCenter</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Tag Value</label>
+                        <input 
+                            type="text" 
+                            id="tagValue" 
+                            placeholder="APP001"
+                            value="APP001"
+                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                        />
+                    </div>
+
+                    <div class="flex items-end">
+                        <button id="scanBtn" class="w-full flex items-center justify-center gap-2 px-8 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md font-semibold">
+                            <svg id="scanIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                            <span id="scanText">Scan RDS Instances</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="filterInfo" class="hidden mt-4 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg">
+                    <p class="text-sm text-blue-800 font-medium">
+                        🔍 Filtering by: <span id="filterText" class="font-mono font-bold"></span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div id="summaryCards" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 fade-in">
+                <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-600 text-sm font-medium mb-1">Total Instances</p>
+                            <p id="totalInstances" class="text-3xl font-bold text-gray-800">0</p>
+                        </div>
+                        <div class="bg-blue-100 p-3 rounded-lg">
+                            <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-600 text-sm font-medium mb-1">Encrypted at Rest</p>
+                            <p id="encryptedAtRest" class="text-3xl font-bold text-gray-800">0</p>
+                        </div>
+                        <div class="bg-green-100 p-3 rounded-lg">
+                            <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-600 text-sm font-medium mb-1">In-Transit SSL</p>
+                            <p id="inTransitSSL" class="text-3xl font-bold text-gray-800">0</p>
+                        </div>
+                        <div class="bg-purple-100 p-3 rounded-lg">
+                            <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-red-500">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-600 text-sm font-medium mb-1">Public Access</p>
+                            <p id="publicAccess" class="text-3xl font-bold text-gray-800">0</p>
+                        </div>
+                        <div class="bg-red-100 p-3 rounded-lg">
+                            <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Instance Cards -->
+            <div id="instancesContainer" class="space-y-4"></div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="bg-white rounded-xl shadow-md p-12 text-center fade-in">
+                <svg class="w-20 h-20 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                </svg>
+                <p class="text-gray-600 text-xl font-medium">No instances scanned yet</p>
+                <p class="text-gray-500 mt-2">Enter your API details and click "Scan RDS Instances" to begin</p>
+            </div>
+
+            <!-- Loading Overlay -->
+            <div id="loadingOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div class="bg-white rounded-xl p-8 shadow-2xl text-center">
+                    <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p class="text-gray-700 font-medium">Scanning RDS instances...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION - UPDATE THESE VALUES
+        // ============================================
+        const API_ENDPOINT = 'https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/prod/scan';
+        const API_KEY = 'your-api-key-here';
+        const DEBUG_MODE = true; // Set to false in production
+        // ============================================
+
+        let instances = [];
+
+        document.getElementById('scanBtn').addEventListener('click', async function() {
+            const tagKey = document.getElementById('tagKey').value.trim();
+            const tagValue = document.getElementById('tagValue').value.trim();
+
+            if (!tagValue) {
+                alert('Please enter Tag Value');
+                return;
+            }
+
+            // Show loading
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+            this.disabled = true;
+
+            // Update filter info
+            document.getElementById('filterInfo').classList.remove('hidden');
+            document.getElementById('filterText').textContent = `${tagKey}=${tagValue}`;
+
+            try {
+                if (DEBUG_MODE) {
+                    console.log('=== DEBUG MODE ===');
+                    console.log('API Endpoint:', API_ENDPOINT);
+                    console.log('Request payload:', { tagKey, tagValue });
+                }
+                
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({
+                        tagKey: tagKey,
+                        tagValue: tagValue
+                    })
+                });
+
+                console.log('Response status:', response.status);
+
+                if (response.status === 403) {
+                    throw new Error('Invalid API Key (403 Forbidden)');
+                }
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API Error ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+                console.log('Response data:', data);
+                console.log('Response data type:', typeof data);
+                console.log('Response keys:', Object.keys(data));
+                
+                // Handle different response formats
+                if (data.body && typeof data.body === 'string') {
+                    // If response has a body string (Lambda proxy format)
+                    const parsedBody = JSON.parse(data.body);
+                    console.log('Parsed body:', parsedBody);
+                    instances = parsedBody.instances || [];
+                } else if (data.instances) {
+                    // Direct instances array
+                    instances = data.instances;
+                } else if (Array.isArray(data)) {
+                    // Response is directly an array
+                    instances = data;
+                } else {
+                    console.error('Unexpected response format:', data);
+                    instances = [];
+                }
+
+                console.log('Instances found:', instances.length);
+
+                if (instances.length === 0) {
+                    alert(`No RDS instances found with tag ${tagKey}=${tagValue}\n\nCheck the browser console (F12) for the actual API response.`);
+                }
+
+                renderInstances();
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Error: ${error.message}`);
+            } finally {
+                document.getElementById('loadingOverlay').classList.add('hidden');
+                this.disabled = false;
+            }
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            const csv = [
+                ['Name', 'ID', 'Engine', 'Region', 'At-Rest Encryption', 'In-Transit Encryption', 'Public Access', 'IAM Auth', 'Security Score'].join(','),
+                ...instances.map(inst => [
+                    inst.name,
+                    inst.id,
+                    inst.engine,
+                    inst.region,
+                    inst.encryption.atRest ? 'Yes' : 'No',
+                    inst.encryption.inTransit ? 'Yes' : 'No',
+                    inst.network.publiclyAccessible ? 'Yes (Risk)' : 'No',
+                    inst.authentication.iamEnabled ? 'Yes' : 'No',
+                    calculateSecurityScore(inst) + '%'
+                ].join(','))
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `rds-security-audit-${Date.now()}.csv`;
+            a.click();
+        });
+
+        function calculateSecurityScore(instance) {
+            const checks = [
+                instance.encryption.atRest,
+                instance.encryption.inTransit,
+                instance.backups.encrypted,
+                !instance.network.publiclyAccessible,
+                instance.authentication.iamEnabled,
+                instance.monitoring.enhancedMonitoring,
+                instance.backups.automated
+            ];
+            const score = checks.filter(Boolean).length;
+            return Math.round((score / checks.length) * 100);
+        }
+
+        function getScoreColor(score) {
+            if (score >= 80) return 'text-green-600 bg-green-50';
+            if (score >= 60) return 'text-yellow-600 bg-yellow-50';
+            return 'text-red-600 bg-red-50';
+        }
+
+        function getScoreBadge(score) {
+            if (score >= 80) return { text: 'Excellent', class: 'bg-green-500' };
+            if (score >= 60) return { text: 'Good', class: 'bg-yellow-500' };
+            return { text: 'Needs Attention', class: 'bg-red-500' };
+        }
+
+        function renderInstances() {
+            const container = document.getElementById('instancesContainer');
+            const emptyState = document.getElementById('emptyState');
+            const summaryCards = document.getElementById('summaryCards');
+            const exportBtn = document.getElementById('exportBtn');
+
+            if (instances.length === 0) {
+                emptyState.classList.remove('hidden');
+                summaryCards.classList.add('hidden');
+                exportBtn.classList.add('hidden');
+                container.innerHTML = '';
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            summaryCards.classList.remove('hidden');
+            exportBtn.classList.remove('hidden');
+            exportBtn.classList.add('flex');
+
+            // Update summary
+            document.getElementById('totalInstances').textContent = instances.length;
+            document.getElementById('encryptedAtRest').textContent = instances.filter(i => i.encryption.atRest).length;
+            document.getElementById('inTransitSSL').textContent = instances.filter(i => i.encryption.inTransit).length;
+            document.getElementById('publicAccess').textContent = instances.filter(i => i.network.publiclyAccessible).length;
+
+            // Render instances
+            container.innerHTML = instances.map((instance, index) => {
+                const score = calculateSecurityScore(instance);
+                const badge = getScoreBadge(score);
+                const scoreColorClass = getScoreColor(score);
+
+                return `
+                    <div class="bg-white rounded-xl shadow-lg p-6 fade-in hover:shadow-xl transition-shadow" style="animation-delay: ${index * 0.1}s">
+                        <div class="flex flex-col md:flex-row md:items-start md:justify-between mb-6">
+                            <div class="flex-1 mb-4 md:mb-0">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <h3 class="text-2xl font-bold text-gray-800">${instance.name}</h3>
+                                    <span class="${badge.class} text-white text-xs px-3 py-1 rounded-full font-medium">${badge.text}</span>
+                                </div>
+                                <p class="text-gray-600 font-mono text-sm mb-1">${instance.id}</p>
+                                <p class="text-gray-500 text-sm">
+                                    <span class="inline-flex items-center gap-1">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
+                                        </svg>
+                                        ${instance.engine} ${instance.version}
+                                    </span>
+                                    <span class="mx-2">•</span>
+                                    <span class="inline-flex items-center gap-1">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064"/>
+                                        </svg>
+                                        ${instance.region}
+                                    </span>
+                                </p>
+                                <div class="flex flex-wrap gap-2 mt-3">
+                                    ${Object.entries(instance.tags || {}).map(([key, value]) => 
+                                        `<span class="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded-full font-medium">${key}: ${value}</span>`
+                                    ).join('')}
+                                </div>
+                            </div>
+                            <div class="text-center md:text-right">
+                                <p class="text-sm text-gray-600 font-medium mb-1">Security Score</p>
+                                <div class="${scoreColorClass} inline-flex items-center justify-center w-24 h-24 rounded-xl font-bold text-3xl border-4 ${scoreColorClass.includes('green') ? 'border-green-200' : scoreColorClass.includes('yellow') ? 'border-yellow-200' : 'border-red-200'}">
+                                    ${score}%
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <!-- Encryption -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                    </svg>
+                                    Encryption
+                                </h4>
+                                <div class="space-y-2">
+                                    ${statusBadge(instance.encryption.atRest, 'At Rest')}
+                                    ${statusBadgeWithInfo(
+                                        instance.encryption.inTransit, 
+                                        'In Transit (SSL/TLS)',
+                                        instance.encryption.inTransitEnforced ? 'Enforced' : instance.encryption.inTransit ? 'Available (Not Enforced)' : 'Not Available',
+                                        instance.encryption.inTransitEnforced ? 'success' : instance.encryption.inTransit ? 'warning' : 'error'
+                                    )}
+                                    ${instance.encryption.certificateAuthority ? `<p class="text-xs text-gray-500 mt-2">CA: ${instance.encryption.certificateAuthority}</p>` : ''}
+                                    ${instance.encryption.kmsKeyId ? `<p class="text-xs text-gray-500 mt-1 font-mono">KMS: ...${instance.encryption.kmsKeyId.split('/').pop()}</p>` : ''}
+                                </div>
+                            </div>
+
+                            <!-- Backups -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                                    </svg>
+                                    Backups
+                                </h4>
+                                <div class="space-y-2">
+                                    ${statusBadge(instance.backups.automated, 'Automated')}
+                                    ${statusBadge(instance.backups.encrypted, 'Encrypted')}
+                                    <p class="text-sm text-gray-600 flex items-center gap-2">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        Retention: ${instance.backups.retentionDays} days
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Network -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
+                                    </svg>
+                                    Network
+                                </h4>
+                                <div class="space-y-2">
+                                    ${statusBadge(!instance.network.publiclyAccessible, instance.network.publiclyAccessible ? 'Publicly Accessible ⚠️' : 'Private')}
+                                    <p class="text-xs text-gray-500 font-mono">VPC: ${instance.network.vpcId}</p>
+                                    <p class="text-xs text-gray-500 font-mono">SG: ${instance.network.securityGroups.join(', ')}</p>
+                                </div>
+                            </div>
+
+                            <!-- Authentication -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                                    </svg>
+                                    Authentication
+                                </h4>
+                                <div class="space-y-2">
+                                    ${statusBadge(instance.authentication.iamEnabled, 'IAM Database Auth')}
+                                    ${statusBadge(instance.authentication.passwordRotation, 'Password Rotation')}
+                                </div>
+                            </div>
+
+                            <!-- Monitoring -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                                    </svg>
+                                    Monitoring
+                                </h4>
+                                <div class="space-y-2">
+                                    ${statusBadge(instance.monitoring.enhancedMonitoring, 'Enhanced Monitoring')}
+                                    ${statusBadge(instance.monitoring.performanceInsights, 'Performance Insights')}
+                                </div>
+                            </div>
+                        </div>
+
+                        ${score < 100 ? `
+                            <div class="mt-6 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-l-4 border-yellow-400 rounded-r-lg">
+                                <div class="flex items-start gap-3">
+                                    <svg class="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <div class="flex-1">
+                                        <p class="text-sm font-semibold text-yellow-800 mb-2">Security Recommendations:</p>
+                                        <ul class="text-sm text-yellow-700 space-y-1.5">
+                                            ${!instance.encryption.atRest ? '<li class="flex items-start gap-2"><span class="text-yellow-600">•</span><span>Enable encryption at rest using AWS KMS</span></li>' : ''}
+                                            ${!instance.encryption.inTransit ? '<li class="flex items-start gap-2"><span class="text-red-600">⚠</span><span class="font-medium">Enable SSL/TLS certificate for in-transit encryption</span></li>' : ''}
+                                            ${instance.encryption.inTransit && !instance.encryption.inTransitEnforced ? '<li class="flex items-start gap-2"><span class="text-yellow-600">•</span><span>SSL/TLS is available but not enforced. Consider enforcing it via parameter groups (rds.force_ssl or require_secure_transport)</span></li>' : ''}
+                                            ${instance.network.publiclyAccessible ? '<li class="flex items-start gap-2"><span class="text-red-600">⚠</span><span class="font-medium">Remove public accessibility - high security risk!</span></li>' : ''}
+                                            ${!instance.authentication.iamEnabled ? '<li class="flex items-start gap-2"><span class="text-yellow-600">•</span><span>Enable IAM database authentication</span></li>' : ''}
+                                            ${!instance.backups.encrypted ? '<li class="flex items-start gap-2"><span class="text-yellow-600">•</span><span>Enable backup encryption</span></li>' : ''}
+                                            ${!instance.backups.automated ? '<li class="flex items-start gap-2"><span class="text-yellow-600">•</span><span>Enable automated backups</span></li>' : ''}
+                                            ${!instance.monitoring.enhancedMonitoring ? '<li class="flex items-start gap-2"><span class="text-yellow-600">•</span><span>Enable enhanced monitoring for better observability</span></li>' : ''}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : `
+                            <div class="mt-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-l-4 border-green-400 rounded-r-lg">
+                                <div class="flex items-center gap-3">
+                                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <p class="text-sm font-semibold text-green-800">Excellent! All security best practices are enabled.</p>
+                                </div>
+                            </div>
+                        `}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function statusBadge(enabled, label) {
+            const icon = enabled 
+                ? `<svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                   </svg>`
+                : `<svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                   </svg>`;
+            const color = enabled ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50';
+            return `
+                <div class="flex items-center gap-2 p-2 rounded-lg ${color}">
+                    ${icon}
+                    <span class="text-sm font-medium">${label}</span>
+                </div>
+            `;
+        }
+
+        function statusBadgeWithInfo(enabled, label, info, type = 'success') {
+            let icon, color;
+            
+            if (type === 'success') {
+                icon = `<svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                   </svg>`;
+                color = 'text-green-700 bg-green-50 border-green-200';
+            } else if (type === 'warning') {
+                icon = `<svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                   </svg>`;
+                color = 'text-yellow-700 bg-yellow-50 border-yellow-200';
+            } else {
+                icon = `<svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                   </svg>`;
+                color = 'text-red-700 bg-red-50 border-red-200';
+            }
+            
+            return `
+                <div class="p-2 rounded-lg ${color} border">
+                    <div class="flex items-center gap-2 mb-1">
+                        ${icon}
+                        <span class="text-sm font-medium">${label}</span>
+                    </div>
+                    <p class="text-xs ml-7 opacity-80">${info}</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
