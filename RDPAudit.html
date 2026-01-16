@@ -24,18 +24,29 @@
         <input type="text" id="tagValue" placeholder="Enter tag value">
     </label>
 
+    <label>
+        x-api-client:
+        <input type="text" id="apiClient" placeholder="Enter client ID">
+    </label>
+
+    <label>
+        x-api-key:
+        <input type="text" id="apiKey" placeholder="Enter API key">
+    </label>
+
     <button onclick="fetchRdsData()">Fetch RDS Instances</button>
 
     <h3>Response</h3>
     <pre id="responseOutput"></pre>
 
     <script>
-        const API_URL = "https://YOUR_API_GATEWAY_URL/prod/rds-audit"; // update path if needed
-        const API_KEY = "YOUR_API_KEY"; // replace with your API key
+        const API_URL = "https://YOUR_API_GATEWAY_URL/prod/rds-audit"; // update this
 
         async function fetchRdsData() {
             const tagKey = document.getElementById('tagKey').value.trim();
             const tagValue = document.getElementById('tagValue').value.trim();
+            const apiClient = document.getElementById('apiClient').value.trim();
+            const apiKey = document.getElementById('apiKey').value.trim();
             const output = document.getElementById('responseOutput');
 
             if (!tagValue) {
@@ -53,7 +64,8 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'x-api-key': API_KEY
+                        'x-api-client': apiClient,
+                        'x-api-key': apiKey
                     },
                     body: JSON.stringify(payload)
                 });
