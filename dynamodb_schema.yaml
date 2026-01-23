@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'DynamoDB Table for RDS Security Audit Data'
+
+Resources:
+  RDSSecurityAuditTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: RDSSecurityAudit
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        Enabled: true
+        AttributeName: TTL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Application
+          Value: RDSSecurityAudit
+        - Key: Environment
+          Value: Production
+
+  # S3 Bucket for Lambda deployment packages
+  LambdaDeploymentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'rds-audit-lambda-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+Outputs:
+  TableName:
+    Description: DynamoDB Table Name
+    Value: !Ref RDSSecurityAuditTable
+    Export:
+      Name: RDSSecurityAuditTableName
+  
+  TableArn:
+    Description: DynamoDB Table ARN
+    Value: !GetAtt RDSSecurityAuditTable.Arn
+    Export:
+      Name: RDSSecurityAuditTableArn
+  
+  LambdaBucketName:
+    Description: S3 Bucket for Lambda Code
+    Value: !Ref LambdaDeploymentBucket
+    Export:
+      Name: RDSAuditLambdaBucket
