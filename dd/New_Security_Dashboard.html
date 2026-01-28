@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Audit - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .expand-icon {
+            transition: transform 0.3s ease;
+            display: inline-block;
+        }
+        .expand-icon.rotated {
+            transform: rotate(90deg);
+        }
+        .category-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease;
+        }
+        .category-content.expanded {
+            max-height: 50000px;
+        }
+        .detail-row {
+            display: none;
+        }
+        .detail-row.visible {
+            display: table-row;
+        }
+        tr.main-row:hover {
+            background-color: #f9fafb;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen p-6">
+        <div class="max-w-7xl mx-auto">
+            <!-- Header -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-4">
+                        <div class="bg-blue-600 p-3 rounded-lg">
+                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-800">Security Audit Dashboard</h1>
+                            <p class="text-gray-600">Hierarchical view with detailed tables</p>
+                        </div>
+                    </div>
+                    <button id="exportBtn" class="hidden items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+
+                <!-- Filters -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Filter By Tag Key</label>
+                        <select id="tagKey" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="">All Instances</option>
+                            <option value="app_id">App ID</option>
+                            <option value="Environment">Environment</option>
+                            <option value="Platform">Platform</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Tag Value</label>
+                        <input type="text" id="tagValue" placeholder="Enter tag value" 
+                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <button id="scanBtn" class="flex-1 flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold">
+                            <svg id="scanIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            <span id="scanText">Load Latest Data</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics Cards -->
+            <div id="statsCards" class="hidden grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
+                    <div class="text-sm text-gray-600 mb-1">Total Instances</div>
+                    <div id="statTotal" class="text-2xl font-bold text-gray-800">0</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+                    <div class="text-sm text-gray-600 mb-1">Encrypted</div>
+                    <div id="statEncrypted" class="text-2xl font-bold text-gray-800">0</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
+                    <div class="text-sm text-gray-600 mb-1">SSL/TLS</div>
+                    <div id="statSSL" class="text-2xl font-bold text-gray-800">0</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+                    <div class="text-sm text-gray-600 mb-1">Certs Expiring</div>
+                    <div id="statCertExpiring" class="text-2xl font-bold text-gray-800">0</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
+                    <div class="text-sm text-gray-600 mb-1">Public Access</div>
+                    <div id="statPublic" class="text-2xl font-bold text-gray-800">0</div>
+                </div>
+            </div>
+
+            <!-- Hierarchical Categories -->
+            <div id="categoriesContainer" class="hidden space-y-4">
+                <!-- DATABASE Category -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <div class="cursor-pointer p-6 bg-gradient-to-r from-green-50 to-green-100 border-b" onclick="toggleCategory('database')">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <svg id="icon-database" class="expand-icon rotated w-6 h-6 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <div>
+                                    <h2 class="text-xl font-bold text-gray-800">Database (DB)</h2>
+                                    <p class="text-sm text-gray-600">RDS instances and database servers</p>
+                                </div>
+                            </div>
+                            <div class="bg-green-600 px-4 py-2 rounded-full">
+                                <span id="db-count" class="text-white font-bold text-lg">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="content-database" class="category-content expanded">
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-gray-800 text-white">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Name</th>
+                                        <th class="px-4 py-3 text-left">ID</th>
+                                        <th class="px-4 py-3 text-left">Engine</th>
+                                        <th class="px-4 py-3 text-left">Region</th>
+                                        <th class="px-4 py-3 text-left">App ID</th>
+                                        <th class="px-4 py-3 text-center">Encryption</th>
+                                        <th class="px-4 py-3 text-center">SSL/TLS</th>
+                                        <th class="px-4 py-3 text-center">Public</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="database-instances" class="divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- APPLICATION Category -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <div class="cursor-pointer p-6 bg-gradient-to-r from-blue-50 to-blue-100 border-b" onclick="toggleCategory('application')">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <svg id="icon-application" class="expand-icon rotated w-6 h-6 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <div>
+                                    <h2 class="text-xl font-bold text-gray-800">Application (APP)</h2>
+                                    <p class="text-sm text-gray-600">Application servers and services</p>
+                                </div>
+                            </div>
+                            <div class="bg-blue-600 px-4 py-2 rounded-full">
+                                <span id="app-count" class="text-white font-bold text-lg">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="content-application" class="category-content expanded">
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-gray-800 text-white">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Name</th>
+                                        <th class="px-4 py-3 text-left">ID</th>
+                                        <th class="px-4 py-3 text-left">Engine</th>
+                                        <th class="px-4 py-3 text-left">Region</th>
+                                        <th class="px-4 py-3 text-left">App ID</th>
+                                        <th class="px-4 py-3 text-center">Encryption</th>
+                                        <th class="px-4 py-3 text-center">SSL/TLS</th>
+                                        <th class="px-4 py-3 text-center">Public</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="application-instances" class="divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- IAM Category -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <div class="cursor-pointer p-6 bg-gradient-to-r from-purple-50 to-purple-100 border-b" onclick="toggleCategory('iam')">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <svg id="icon-iam" class="expand-icon rotated w-6 h-6 text-purple-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <div>
+                                    <h2 class="text-xl font-bold text-gray-800">Identity & Access (IAM)</h2>
+                                    <p class="text-sm text-gray-600">IAM roles and access management</p>
+                                </div>
+                            </div>
+                            <div class="bg-purple-600 px-4 py-2 rounded-full">
+                                <span id="iam-count" class="text-white font-bold text-lg">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="content-iam" class="category-content expanded">
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-gray-800 text-white">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Name</th>
+                                        <th class="px-4 py-3 text-left">ID</th>
+                                        <th class="px-4 py-3 text-left">Engine</th>
+                                        <th class="px-4 py-3 text-left">Region</th>
+                                        <th class="px-4 py-3 text-left">App ID</th>
+                                        <th class="px-4 py-3 text-center">Encryption</th>
+                                        <th class="px-4 py-3 text-center">SSL/TLS</th>
+                                        <th class="px-4 py-3 text-center">Public</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="iam-instances" class="divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PLATFORM Category -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <div class="cursor-pointer p-6 bg-gradient-to-r from-orange-50 to-orange-100 border-b" onclick="toggleCategory('platform')">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <svg id="icon-platform" class="expand-icon rotated w-6 h-6 text-orange-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <div>
+                                    <h2 class="text-xl font-bold text-gray-800">Platform</h2>
+                                    <p class="text-sm text-gray-600">Infrastructure and platform services</p>
+                                </div>
+                            </div>
+                            <div class="bg-orange-600 px-4 py-2 rounded-full">
+                                <span id="platform-count" class="text-white font-bold text-lg">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="content-platform" class="category-content expanded">
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-gray-800 text-white">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Name</th>
+                                        <th class="px-4 py-3 text-left">ID</th>
+                                        <th class="px-4 py-3 text-left">Engine</th>
+                                        <th class="px-4 py-3 text-left">Region</th>
+                                        <th class="px-4 py-3 text-left">App ID</th>
+                                        <th class="px-4 py-3 text-center">Encryption</th>
+                                        <th class="px-4 py-3 text-center">SSL/TLS</th>
+                                        <th class="px-4 py-3 text-center">Public</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="platform-instances" class="divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="bg-white rounded-lg shadow-md p-12 text-center">
+                <svg class="w-20 h-20 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                </svg>
+                <p class="text-gray-600 text-xl font-medium">No instances scanned yet</p>
+                <p class="text-gray-500 mt-2">Enter your filters and click "Load Latest Data"</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_ENDPOINT = 'https://qknyl8fst0.execute-api.us-west-2.amazonaws.com/prod/instances';
+        const API_KEY = 'pw9aJ94jdb2MEiM3m5R6b7RscmnqrFCY4TWf7Hga';
+        
+        let instances = [];
+        let allInstances = [];
+
+        // Toggle category
+        function toggleCategory(cat) {
+            const content = document.getElementById('content-' + cat);
+            const icon = document.getElementById('icon-' + cat);
+            content.classList.toggle('expanded');
+            icon.classList.toggle('rotated');
+        }
+
+        // Toggle row details
+        function toggleRowExpand(index) {
+            const detailRow = document.getElementById(`details-${index}`);
+            const expandIcon = document.getElementById(`icon-${index}`);
+            
+            if (detailRow.classList.contains('visible')) {
+                detailRow.classList.remove('visible');
+                expandIcon.classList.remove('rotated');
+            } else {
+                detailRow.classList.add('visible');
+                expandIcon.classList.add('rotated');
+            }
+        }
+
+        // Load data
+        document.getElementById('scanBtn').addEventListener('click', async function() {
+            const tagKey = document.getElementById('tagKey').value;
+            const tagValue = document.getElementById('tagValue').value;
+
+            this.disabled = true;
+            document.getElementById('scanText').textContent = 'Loading...';
+            document.getElementById('scanIcon').classList.add('animate-spin');
+
+            try {
+                const requestBody = {};
+                if (tagKey && tagValue) {
+                    requestBody.tagKey = tagKey;
+                    requestBody.tagValue = tagValue;
+                }
+
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+                allInstances = data.instances || [];
+                instances = allInstances;
+
+                if (instances.length === 0) {
+                    alert('No instances found');
+                    return;
+                }
+
+                renderCategorizedData();
+                updateStats();
+
+                document.getElementById('emptyState').classList.add('hidden');
+                document.getElementById('statsCards').classList.remove('hidden');
+                document.getElementById('categoriesContainer').classList.remove('hidden');
+                document.getElementById('exportBtn').classList.remove('hidden');
+                document.getElementById('exportBtn').classList.add('flex');
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error: ' + error.message);
+            } finally {
+                this.disabled = false;
+                document.getElementById('scanText').textContent = 'Load Latest Data';
+                document.getElementById('scanIcon').classList.remove('animate-spin');
+            }
+        });
+
+        // Categorize and render
+        function renderCategorizedData() {
+            const categories = {
+                database: [],
+                application: [],
+                iam: [],
+                platform: []
+            };
+
+            instances.forEach(inst => {
+                const comp = (inst.tags?.Component || inst.tags?.component || '').toLowerCase();
+                const type = (inst.tags?.Type || inst.tags?.type || '').toLowerCase();
+                
+                if (comp === 'db' || comp === 'database' || type === 'database') {
+                    categories.database.push(inst);
+                } else if (comp === 'app' || comp === 'application' || type === 'application') {
+                    categories.application.push(inst);
+                } else if (comp === 'iam' || type === 'iam') {
+                    categories.iam.push(inst);
+                } else if (comp === 'platform' || type === 'platform') {
+                    categories.platform.push(inst);
+                } else {
+                    categories.database.push(inst);
+                }
+            });
+
+            document.getElementById('db-count').textContent = categories.database.length;
+            document.getElementById('app-count').textContent = categories.application.length;
+            document.getElementById('iam-count').textContent = categories.iam.length;
+            document.getElementById('platform-count').textContent = categories.platform.length;
+
+            renderCategory('database', categories.database);
+            renderCategory('application', categories.application);
+            renderCategory('iam', categories.iam);
+            renderCategory('platform', categories.platform);
+        }
+
+        // Render category table
+        function renderCategory(catName, categoryInstances) {
+            const tbody = document.getElementById(`${catName}-instances`);
+            
+            if (categoryInstances.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No instances in this category</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = categoryInstances.map((instance, index) => {
+                const globalIndex = `${catName}-${index}`;
+                return `
+                    <tr class="main-row cursor-pointer" onclick="toggleRowExpand('${globalIndex}')">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <svg id="icon-${globalIndex}" class="expand-icon w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <span class="font-medium text-gray-900">${instance.name || 'N/A'}</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${instance.id}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${instance.engine} ${instance.version}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${instance.region}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${instance.tags?.app_id || 'N/A'}</td>
+                        <td class="px-4 py-3 text-center">${statusIcon(instance.encryption?.atRest)}</td>
+                        <td class="px-4 py-3 text-center">${statusIcon(instance.encryption?.inTransit)}</td>
+                        <td class="px-4 py-3 text-center">${instance.network?.publiclyAccessible ? '<svg class="w-6 h-6 text-red-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>' : '<svg class="w-6 h-6 text-green-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'}</td>
+                    </tr>
+                    <tr id="details-${globalIndex}" class="detail-row bg-gray-50">
+                        <td colspan="8" class="px-4 py-6">
+                            ${renderInstanceDetails(instance)}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Render instance details (same as old dashboard)
+        function renderInstanceDetails(instance) {
+            // Debug: Log the instance data to console
+            console.log('Instance data:', instance);
+            console.log('Authentication:', instance.authentication);
+            console.log('Secrets:', instance.secrets);
+            
+            return `
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 max-w-full">
+                    <!-- Encryption Section -->
+                    <div class="bg-white rounded-lg p-4 shadow-sm">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                            Encryption
+                        </h3>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">At Rest Encryption:</span>
+                                <span class="text-xs font-medium ${instance.encryption?.atRest ? 'text-green-600' : 'text-red-600'}">
+                                    ${instance.encryption?.atRest ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">In Transit (SSL/TLS):</span>
+                                <span class="text-xs font-medium ${instance.encryption?.inTransit ? 'text-green-600' : 'text-red-600'}">
+                                    ${instance.encryption?.inTransit ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            ${instance.encryption?.inTransit ? `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs text-gray-600">SSL Enforced:</span>
+                                    <span class="text-xs font-medium ${instance.encryption?.inTransitEnforced ? 'text-green-600' : 'text-yellow-600'}">
+                                        ${instance.encryption?.inTransitEnforced ? 'Yes' : 'No'}
+                                    </span>
+                                </div>
+                            ` : ''}
+                            ${instance.encryption?.certificateExpiryDate ? `
+                                <div class="mt-3 pt-3 border-t">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-xs text-gray-600">Certificate Expires:</span>
+                                        <span class="font-medium text-sm ${
+                                            instance.encryption.certificateDaysToExpiry <= 30 ? 'text-red-600' :
+                                            instance.encryption.certificateDaysToExpiry <= 90 ? 'text-yellow-600' :
+                                            'text-gray-800'
+                                        }">
+                                            ${new Date(instance.encryption.certificateExpiryDate).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <div class="flex justify-between items-center mt-2">
+                                        <span class="text-xs text-gray-600">Days Until Expiry:</span>
+                                        <span class="font-medium text-sm ${
+                                            instance.encryption.certificateDaysToExpiry <= 30 ? 'text-red-600 font-bold' :
+                                            instance.encryption.certificateDaysToExpiry <= 90 ? 'text-yellow-600 font-semibold' :
+                                            'text-green-600'
+                                        }">
+                                            ${instance.encryption.certificateDaysToExpiry} days
+                                            ${instance.encryption.certificateDaysToExpiry <= 30 ? ' ⚠️ URGENT' :
+                                              instance.encryption.certificateDaysToExpiry <= 90 ? ' ⚡ Soon' : ''}
+                                        </span>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${instance.encryption?.kmsKeyId ? `
+                                <div class="mt-2">
+                                    <span class="text-xs text-gray-500">KMS Key: ${instance.encryption.kmsKeyId.split('/').pop()}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Network & Security -->
+                    <div class="bg-white rounded-lg p-4 shadow-sm">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
+                            </svg>
+                            Network & Access
+                        </h3>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">Publicly Accessible:</span>
+                                <span class="text-xs font-medium ${instance.network?.publiclyAccessible ? 'text-red-600' : 'text-green-600'}">
+                                    ${instance.network?.publiclyAccessible ? 'Yes ⚠️' : 'No'}
+                                </span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">IAM Authentication:</span>
+                                <span class="text-xs font-medium ${instance.authentication?.iamEnabled ? 'text-green-600' : 'text-gray-600'}">
+                                    ${instance.authentication?.iamEnabled ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            ${instance.network?.vpcId ? `
+                                <div class="mt-2 pt-2 border-t">
+                                    <span class="text-xs text-gray-500">VPC: ${instance.network.vpcId}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Authentication & Secrets Manager -->
+                    <div class="bg-white rounded-lg p-4 shadow-sm border-l-4 ${instance.secrets?.secret_arn || instance.secrets?.secret_name ? 'border-green-500' : 'border-gray-300'}">
+                        <h3 class="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                            Authentication & Secrets
+                        </h3>
+                        <div class="space-y-1.5 text-xs">
+                            <!-- Authentication Line -->
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs text-gray-600">IAM Auth:</span>
+                                    <span class="${instance.authentication?.iamEnabled ? 'text-green-600' : 'text-red-600'} flex items-center gap-0.5">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${instance.authentication?.iamEnabled ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'}"/>
+                                        </svg>
+                                        ${instance.authentication?.iamEnabled ? 'On' : 'Off'}
+                                    </span>
+                                </div>
+                                <span class="text-gray-400">|</span>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs text-gray-600">Password Rotation:</span>
+                                    <span class="${instance.authentication?.passwordRotation ? 'text-green-600' : 'text-red-600'} flex items-center gap-0.5">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${instance.authentication?.passwordRotation ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'}"/>
+                                        </svg>
+                                        ${instance.authentication?.passwordRotation ? 'On' : 'Off'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            ${instance.secrets?.secret_arn || instance.secrets?.secret_name ? `
+                                <!-- Secrets Manager Line 1 -->
+                                <div class="flex items-center gap-2 pt-1 border-t border-gray-200">
+                                    <span class="text-gray-600 font-medium">Secret:</span>
+                                    <span class="text-green-600 flex items-center gap-1">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        Managed
+                                    </span>
+                                    <span class="text-gray-400">|</span>
+                                    <code class="text-gray-600 truncate max-w-md">${instance.secrets?.secret_name || instance.secrets?.secret_arn || 'N/A'}</code>
+                                </div>
+                                <!-- Secrets Manager Line 2 -->
+                                <div class="flex items-center gap-3 flex-wrap">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-xs text-gray-600">Interval:</span>
+                                        <span class="font-medium">${instance.secrets?.rotation_days || '7'} days</span>
+                                    </div>
+                                    ${instance.secrets?.last_rotated ? `
+                                        <span class="text-gray-400">|</span>
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-xs text-gray-600">Last:</span>
+                                            <span class="font-medium">${new Date(instance.secrets.last_rotated).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}</span>
+                                        </div>
+                                    ` : ''}
+                                    <span class="text-gray-400">|</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-xs text-gray-600">Auto:</span>
+                                        <span class="${instance.secrets?.auto_rotation || instance.secrets?.rotation_enabled ? 'text-green-600' : 'text-red-600'} flex items-center gap-0.5">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${instance.secrets?.auto_rotation || instance.secrets?.rotation_enabled ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'}"/>
+                                            </svg>
+                                            ${instance.secrets?.auto_rotation || instance.secrets?.rotation_enabled ? 'On' : 'Off'}
+                                        </span>
+                                    </div>
+                                    ${instance.secrets?.rotation_days !== null && instance.secrets?.rotation_days !== undefined ? `
+                                        <span class="text-gray-400">|</span>
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-xs text-gray-600">Days:</span>
+                                            <span class="font-bold ${
+                                                instance.secrets.rotation_days > 90 ? 'text-red-600' :
+                                                instance.secrets.rotation_days > 60 ? 'text-yellow-600' :
+                                                'text-green-600'
+                                            }">${instance.secrets.rotation_days}${instance.secrets.rotation_days > 90 ? '⚠️' : instance.secrets.rotation_days > 60 ? '⚡' : ''}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            ` : `
+                                <div class="text-gray-500 pt-1 border-t border-gray-200">⚠️ No Secrets Manager configured</div>
+                            `}
+                        </div>
+                    </div>
+
+                    <!-- Monitoring, Backups & Tags -->
+                    <div class="bg-white rounded-lg p-4 shadow-sm">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                            </svg>
+                            Monitoring, Backups & Tags
+                        </h3>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">Enhanced Monitoring:</span>
+                                <span class="text-xs font-medium ${instance.monitoring?.enhancedMonitoring ? 'text-green-600' : 'text-gray-600'}">
+                                    ${instance.monitoring?.enhancedMonitoring ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">Performance Insights:</span>
+                                <span class="text-xs font-medium ${instance.monitoring?.performanceInsights ? 'text-green-600' : 'text-gray-600'}">
+                                    ${instance.monitoring?.performanceInsights ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">Automated Backups:</span>
+                                <span class="text-xs font-medium ${instance.backups?.automated ? 'text-green-600' : 'text-red-600'}">
+                                    ${instance.backups?.automated ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            ${instance.backups?.retentionDays ? `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs text-gray-600">Retention Period:</span>
+                                    <span class="font-medium">${instance.backups.retentionDays} days</span>
+                                </div>
+                            ` : ''}
+                            ${instance.backups?.encrypted !== undefined ? `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs text-gray-600">Backup Encryption:</span>
+                                    <span class="text-xs font-medium ${instance.backups.encrypted ? 'text-green-600' : 'text-red-600'}">
+                                        ${instance.backups.encrypted ? 'Enabled' : 'Disabled'}
+                                    </span>
+                                </div>
+                            ` : ''}
+                            
+                            ${Object.entries(instance.tags || {}).length > 0 ? `
+                                <div class="mt-4 pt-4 border-t border-gray-200">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 4 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                                        </svg>
+                                        <span class="text-sm font-semibold text-gray-700">Tags</span>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2 text-sm">
+                                        ${Object.entries(instance.tags || {}).map(([key, value]) => `
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-xs text-gray-600">${key}:</span>
+                                                <span class="font-medium text-gray-900 truncate">${value}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    </div>
+                </div>
+            `;
+        }
+
+        function statusIcon(enabled) {
+            return enabled ? 
+                '<svg class="w-6 h-6 text-green-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' :
+                '<svg class="w-6 h-6 text-red-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+        }
+
+        function updateStats() {
+            document.getElementById('statTotal').textContent = instances.length;
+            document.getElementById('statEncrypted').textContent = instances.filter(i => i.encryption?.atRest).length;
+            document.getElementById('statSSL').textContent = instances.filter(i => i.encryption?.inTransit).length;
+            document.getElementById('statCertExpiring').textContent = instances.filter(i => 
+                i.encryption?.certificateDaysToExpiry !== null && i.encryption?.certificateDaysToExpiry <= 90
+            ).length;
+            document.getElementById('statPublic').textContent = instances.filter(i => i.network?.publiclyAccessible).length;
+        }
+
+        // Export CSV
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            const csv = [
+                ['Category', 'Name', 'ID', 'Engine', 'Region', 'App ID', 'Encryption', 'SSL/TLS', 'Public', 'Cert Expiry', 'Days to Expiry'].join(','),
+                ...instances.map(inst => {
+                    const comp = (inst.tags?.Component || inst.tags?.component || 'database').toUpperCase();
+                    return [
+                        comp,
+                        inst.name,
+                        inst.id,
+                        `${inst.engine} ${inst.version}`,
+                        inst.region,
+                        inst.tags?.app_id || 'N/A',
+                        inst.encryption?.atRest ? 'Yes' : 'No',
+                        inst.encryption?.inTransit ? 'Yes' : 'No',
+                        inst.network?.publiclyAccessible ? 'Yes' : 'No',
+                        inst.encryption?.certificateExpiryDate ? new Date(inst.encryption.certificateExpiryDate).toLocaleDateString() : 'N/A',
+                        inst.encryption?.certificateDaysToExpiry !== null ? inst.encryption.certificateDaysToExpiry : 'N/A'
+                    ].join(',');
+                })
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `security-audit-${Date.now()}.csv`;
+            a.click();
+        });
+    </script>
+</body>
+</html>
