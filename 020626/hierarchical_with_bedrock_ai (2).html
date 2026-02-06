@@ -1,0 +1,1801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Audit - Hierarchical Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .expand-icon {
+            transition: transform 0.3s ease;
+            display: inline-block;
+        }
+        .expand-icon.rotated {
+            transform: rotate(90deg);
+        }
+        .category-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease;
+        }
+        .category-content.expanded {
+            max-height: 50000px;
+        }
+        .detail-row {
+            display: none;
+        }
+        .detail-row.visible {
+            display: table-row;
+        }
+        tr.main-row:hover {
+            background-color: #f9fafb;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        
+        /* Chat animations */
+        #chat-window {
+            animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        #chat-messages > div {
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        /* Custom scrollbar for chat */
+        #chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+        #chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        #chat-messages::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        #chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen p-6">
+        <div class="max-w-7xl mx-auto">
+            <!-- Header -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-4">
+                        <div class="bg-blue-600 p-3 rounded-lg">
+                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-800">Security Audit Dashboard</h1>
+                            <p class="text-gray-600">Hierarchical view with detailed tables</p>
+                        </div>
+                    </div>
+                    <button id="exportBtn" class="hidden items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+
+                <!-- Filters -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Filter By Tag Key</label>
+                        <select id="tagKey" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="">All Instances</option>
+                            <option value="app_id">App ID</option>
+                            <option value="Environment">Environment</option>
+                            <option value="Platform">Platform</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Tag Value</label>
+                        <input type="text" id="tagValue" placeholder="Enter tag value" 
+                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <button id="scanBtn" class="flex-1 flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold">
+                            <svg id="scanIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            <span id="scanText">Load Latest Data</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics Cards -->
+            <div id="statsCards" class="hidden grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
+                    <div class="text-sm text-gray-600 mb-1">Total Instances</div>
+                    <div id="statTotal" class="text-2xl font-bold text-gray-800">0</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+                    <div class="text-sm text-gray-600 mb-1">Encrypted</div>
+                    <div id="statEncrypted" class="text-2xl font-bold text-gray-800">0</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
+                    <div class="text-sm text-gray-600 mb-1">SSL/TLS</div>
+                    <div id="statSSL" class="text-2xl font-bold text-gray-800">0</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+                    <div class="text-sm text-gray-600 mb-1">Certs Expiring</div>
+                    <div id="statCertExpiring" class="text-2xl font-bold text-gray-800">0</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
+                    <div class="text-sm text-gray-600 mb-1">Public Access</div>
+                    <div id="statPublic" class="text-2xl font-bold text-gray-800">0</div>
+                </div>
+            </div>
+
+            <!-- Hierarchical Categories -->
+            <div id="categoriesContainer" class="hidden space-y-4">
+            <div class="space-y-8">
+                <!-- ROOT LAYER 1: WITH APP ID/NAME -->
+                <div class="bg-white rounded-xl shadow-xl overflow-hidden border-2 border-blue-300">
+                    <div class="cursor-pointer p-6 bg-gradient-to-r from-blue-100 to-indigo-100 border-b-2 border-blue-300" onclick="toggleRootLayer('with-app')">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <svg id="icon-with-app" class="expand-icon rotated w-7 h-7 text-blue-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <div>
+                                    <h2 class="text-2xl font-bold text-gray-900">📱 Applications (With APP ID/Name)</h2>
+                                    <p class="text-sm text-gray-700">Instances grouped by Application ID or Name</p>
+                                </div>
+                            </div>
+                            <div class="bg-blue-700 px-5 py-2 rounded-full shadow-lg">
+                                <span id="with-app-count" class="text-white font-bold text-xl">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="content-with-app" class="category-content expanded bg-gray-100 p-6">
+                        <div id="with-app-instances" class="space-y-6">
+                            <!-- App groups will be rendered here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ROOT LAYER 2: WITHOUT APP ID/NAME -->
+                <div class="bg-white rounded-xl shadow-xl overflow-hidden border-2 border-gray-400">
+                    <div class="cursor-pointer p-6 bg-gradient-to-r from-gray-100 to-gray-200 border-b-2 border-gray-400" onclick="toggleRootLayer('without-app')">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <svg id="icon-without-app" class="expand-icon rotated w-7 h-7 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <div>
+                                    <h2 class="text-2xl font-bold text-gray-900">🔧 Uncategorized (Without APP ID/Name)</h2>
+                                    <p class="text-sm text-gray-700">Instances without Application ID or Name</p>
+                                </div>
+                            </div>
+                            <div class="bg-gray-700 px-5 py-2 rounded-full shadow-lg">
+                                <span id="without-app-count" class="text-white font-bold text-xl">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="content-without-app" class="category-content expanded bg-gray-50 p-6 space-y-6">
+                        <!-- Database Category -->
+                        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                            <div class="cursor-pointer p-5 bg-gradient-to-r from-green-50 to-green-100 border-b" onclick="toggleCategory('without-database')">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <svg id="icon-without-database" class="expand-icon rotated w-5 h-5 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                        </svg>
+                                        <div>
+                                            <h3 class="text-lg font-bold text-gray-800">🗄️ Database (DB)</h3>
+                                            <p class="text-xs text-gray-600">Database instances</p>
+                                        </div>
+                                    </div>
+                                    <div class="bg-green-600 px-3 py-1 rounded-full">
+                                        <span id="without-database-count" class="text-white font-bold">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="content-without-database" class="category-content expanded">
+                                <div class="overflow-x-auto">
+                                    <table class="w-full">
+                                        <thead class="bg-gray-800 text-white">
+                                            <tr>
+                                                <th class="px-4 py-3 text-left">Name</th>
+                                                <th class="px-4 py-3 text-left">ID</th>
+                                                <th class="px-4 py-3 text-left">Engine</th>
+                                                <th class="px-4 py-3 text-left">Region</th>
+                                                <th class="px-4 py-3 text-left">App ID</th>
+                                                <th class="px-4 py-3 text-center">Encryption</th>
+                                                <th class="px-4 py-3 text-center">SSL/TLS</th>
+                                                <th class="px-4 py-3 text-center">Public</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="without-database-instances" class="divide-y divide-gray-200"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Application Category -->
+                        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                            <div class="cursor-pointer p-5 bg-gradient-to-r from-blue-50 to-blue-100 border-b" onclick="toggleCategory('without-application')">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <svg id="icon-without-application" class="expand-icon rotated w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                        </svg>
+                                        <div>
+                                            <h3 class="text-lg font-bold text-gray-800">💻 Application (APP)</h3>
+                                            <p class="text-xs text-gray-600">Application servers</p>
+                                        </div>
+                                    </div>
+                                    <div class="bg-blue-600 px-3 py-1 rounded-full">
+                                        <span id="without-application-count" class="text-white font-bold">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="content-without-application" class="category-content expanded">
+                                <div class="overflow-x-auto">
+                                    <table class="w-full">
+                                        <thead class="bg-gray-800 text-white">
+                                            <tr>
+                                                <th class="px-4 py-3 text-left">Name</th>
+                                                <th class="px-4 py-3 text-left">ID</th>
+                                                <th class="px-4 py-3 text-left">Engine</th>
+                                                <th class="px-4 py-3 text-left">Region</th>
+                                                <th class="px-4 py-3 text-left">App ID</th>
+                                                <th class="px-4 py-3 text-center">Encryption</th>
+                                                <th class="px-4 py-3 text-center">SSL/TLS</th>
+                                                <th class="px-4 py-3 text-center">Public</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="without-application-instances" class="divide-y divide-gray-200"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Platform Category -->
+                        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                            <div class="cursor-pointer p-5 bg-gradient-to-r from-orange-50 to-orange-100 border-b" onclick="toggleCategory('without-platform')">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <svg id="icon-without-platform" class="expand-icon rotated w-5 h-5 text-orange-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                        </svg>
+                                        <div>
+                                            <h3 class="text-lg font-bold text-gray-800">🔧 Platform</h3>
+                                            <p class="text-xs text-gray-600">Infrastructure services</p>
+                                        </div>
+                                    </div>
+                                    <div class="bg-orange-600 px-3 py-1 rounded-full">
+                                        <span id="without-platform-count" class="text-white font-bold">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="content-without-platform" class="category-content expanded">
+                                <div class="overflow-x-auto">
+                                    <table class="w-full">
+                                        <thead class="bg-gray-800 text-white">
+                                            <tr>
+                                                <th class="px-4 py-3 text-left">Name</th>
+                                                <th class="px-4 py-3 text-left">ID</th>
+                                                <th class="px-4 py-3 text-left">Engine</th>
+                                                <th class="px-4 py-3 text-left">Region</th>
+                                                <th class="px-4 py-3 text-left">App ID</th>
+                                                <th class="px-4 py-3 text-center">Encryption</th>
+                                                <th class="px-4 py-3 text-center">SSL/TLS</th>
+                                                <th class="px-4 py-3 text-center">Public</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="without-platform-instances" class="divide-y divide-gray-200"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="bg-white rounded-lg shadow-md p-12 text-center">
+                <svg class="w-20 h-20 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                </svg>
+                <p class="text-gray-600 text-xl font-medium">No instances scanned yet</p>
+                <p class="text-gray-500 mt-2">Enter your filters and click "Load Latest Data"</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_ENDPOINT = 'https://qknyl8fst0.execute-api.us-west-2.amazonaws.com/prod/instances';
+        const API_KEY = 'pw9aJ94jdb2MEiM3m5R6b7RscmnqrFCY4TWf7Hga';
+        const AI_API_ENDPOINT = 'https://qknyl8fst0.execute-api.us-west-2.amazonaws.com/prod/ai-query'; // AI Query API endpoint
+        
+        let instances = [];
+        let allInstances = [];
+        const DEBUG_MODE = false; // Set to true for debugging
+
+        // Toggle category
+        // Toggle root layer
+        function toggleRootLayer(layerId) {
+            const content = document.getElementById(`content-${layerId}`);
+            const icon = document.getElementById(`icon-${layerId}`);
+            if (content.classList.contains('expanded')) {
+                content.classList.remove('expanded');
+                icon.classList.remove('rotated');
+            } else {
+                content.classList.add('expanded');
+                icon.classList.add('rotated');
+            }
+        }
+
+        function toggleCategory(cat) {
+            const content = document.getElementById('content-' + cat);
+            const icon = document.getElementById('icon-' + cat);
+            content.classList.toggle('expanded');
+            icon.classList.toggle('rotated');
+        }
+
+        // Toggle row details
+        function toggleRowExpand(index) {
+            const detailRow = document.getElementById(`details-${index}`);
+            const expandIcon = document.getElementById(`icon-${index}`);
+            
+            if (detailRow.classList.contains('visible')) {
+                detailRow.classList.remove('visible');
+                expandIcon.classList.remove('rotated');
+            } else {
+                detailRow.classList.add('visible');
+                expandIcon.classList.add('rotated');
+            }
+        }
+
+        // Load data
+        document.getElementById('scanBtn').addEventListener('click', async function() {
+            const tagKey = document.getElementById('tagKey').value;
+            const tagValue = document.getElementById('tagValue').value;
+
+            this.disabled = true;
+            document.getElementById('scanText').textContent = 'Loading...';
+            document.getElementById('scanIcon').classList.add('animate-spin');
+
+            try {
+                const requestBody = {};
+                if (tagKey && tagValue) {
+                    requestBody.tagKey = tagKey;
+                    requestBody.tagValue = tagValue;
+                }
+
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+                allInstances = data.instances || [];
+                instances = allInstances;
+
+                if (instances.length === 0) {
+                    alert('No instances found');
+                    return;
+                }
+
+                renderCategorizedData();
+                updateStats();
+
+                document.getElementById('emptyState').classList.add('hidden');
+                document.getElementById('statsCards').classList.remove('hidden');
+                document.getElementById('categoriesContainer').classList.remove('hidden');
+                document.getElementById('exportBtn').classList.remove('hidden');
+                document.getElementById('exportBtn').classList.add('flex');
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error: ' + error.message);
+            } finally {
+                this.disabled = false;
+                document.getElementById('scanText').textContent = 'Load Latest Data';
+                document.getElementById('scanIcon').classList.remove('animate-spin');
+            }
+        });
+
+        // Categorize and render
+        // Render categorized data with two-layer root structure
+        function renderCategorizedData() {
+            if (DEBUG_MODE) console.log('renderCategorizedData called with instances:', instances.length);
+            
+            // First, separate instances by APP ID presence
+            const withAppId = {};
+            const withoutAppId = {
+                database: [],
+                application: [],
+                platform: []
+            };
+
+            instances.forEach(inst => {
+                const appId = inst.tags?.app_id || inst.tags?.AppId || inst.tags?.APP_ID;
+                const appName = inst.tags?.app_name || inst.tags?.AppName || inst.tags?.APP_NAME;
+                const identifier = appId || appName;
+
+                if (identifier) {
+                    // Has APP ID/Name - group by app
+                    if (!withAppId[identifier]) {
+                        withAppId[identifier] = {
+                            database: [],
+                            application: [],
+                            platform: [],
+                            metadata: {
+                                app_id: appId,
+                                app_name: appName,
+                                identifier: identifier
+                            }
+                        };
+                    }
+                    
+                    // Update metadata if this instance has values the stored one doesn't
+                    if (appId && !withAppId[identifier].metadata.app_id) {
+                        withAppId[identifier].metadata.app_id = appId;
+                    }
+                    if (appName && !withAppId[identifier].metadata.app_name) {
+                        withAppId[identifier].metadata.app_name = appName;
+                    }
+                    
+                    // Categorize within app
+                    const comp = (inst.tags?.Component || inst.tags?.component || '').toLowerCase();
+                    const type = (inst.tags?.Type || inst.tags?.type || '').toLowerCase();
+                    
+                    console.log(`Instance ${inst.name} - App: ${identifier}, Component: "${comp}", Type: "${type}"`);
+                    
+                    if (comp === 'db' || comp === 'database' || type === 'database') {
+                        withAppId[identifier].database.push(inst);
+                    } else if (comp === 'app' || comp === 'application' || type === 'application') {
+                        withAppId[identifier].application.push(inst);
+                    } else if (comp === 'platform' || type === 'platform') {
+                        withAppId[identifier].platform.push(inst);
+                    } else if (comp === 'iam' || type === 'iam') {
+                        withAppId[identifier].platform.push(inst);
+                    } else {
+                        // Default to database if no component specified
+                        console.log(`  -> Defaulting to database (no component tag)`);
+                        withAppId[identifier].database.push(inst);
+                    }
+                } else {
+                    // No APP ID/Name - categorize directly
+                    const comp = (inst.tags?.Component || inst.tags?.component || '').toLowerCase();
+                    const type = (inst.tags?.Type || inst.tags?.type || '').toLowerCase();
+                    
+                    if (comp === 'db' || comp === 'database' || type === 'database') {
+                        withoutAppId.database.push(inst);
+                    } else if (comp === 'app' || comp === 'application' || type === 'application') {
+                        withoutAppId.application.push(inst);
+                    } else if (comp === 'platform' || type === 'platform') {
+                        withoutAppId.platform.push(inst);
+                    } else if (comp === 'iam' || type === 'iam') {
+                        withoutAppId.platform.push(inst);
+                    } else {
+                        withoutAppId.database.push(inst);
+                    }
+                }
+            });
+
+            // Debug: Log categorization results
+            console.log('Categorization complete:');
+            Object.keys(withAppId).forEach(appId => {
+                console.log(`  App: ${appId}`);
+                console.log(`    Database: ${withAppId[appId].database.length}`);
+                console.log(`    Application: ${withAppId[appId].application.length}`);
+                console.log(`    Platform: ${withAppId[appId].platform.length}`);
+            });
+
+            // Count totals
+            let withAppIdCount = 0;
+            Object.values(withAppId).forEach(app => {
+                withAppIdCount += app.database.length + app.application.length + app.platform.length;
+            });
+            
+            const withoutAppIdCount = withoutAppId.database.length + withoutAppId.application.length + withoutAppId.platform.length;
+
+            // Update root layer counts
+            document.getElementById('with-app-count').textContent = withAppIdCount;
+            document.getElementById('without-app-count').textContent = withoutAppIdCount;
+
+            // Render Layer 1: With APP ID
+            renderWithAppIdLayer(withAppId);
+            
+            // Render Layer 2: Without APP ID
+            renderWithoutAppIdLayer(withoutAppId);
+        }
+
+        // Render Layer 1: Instances with APP ID
+        // Calculate compliance status for an app
+        function calculateAppCompliance(appData) {
+            const allInstances = [
+                ...appData.database,
+                ...appData.application,
+                ...appData.platform
+            ];
+            
+            let compliance = {
+                encryption: true,
+                ssl: true,
+                public: true,
+                overall: true
+            };
+            
+            allInstances.forEach(inst => {
+                if (!inst.encryption?.atRest) {
+                    compliance.encryption = false;
+                    compliance.overall = false;
+                }
+                if (!inst.encryption?.inTransit) {
+                    compliance.ssl = false;
+                    compliance.overall = false;
+                }
+                if (inst.network?.publiclyAccessible) {
+                    compliance.public = false;
+                    compliance.overall = false;
+                }
+            });
+            
+            return compliance;
+        }
+        
+        // Render compliance badge
+        function renderComplianceBadge(isCompliant, label, icon) {
+            if (isCompliant) {
+                return `
+                    <div class="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        <span>${icon} ${label}</span>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="flex items-center gap-1 bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-semibold">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        <span>${icon} ${label}</span>
+                    </div>
+                `;
+            }
+        }
+
+        function renderWithAppIdLayer(withAppId) {
+            const container = document.getElementById('with-app-instances');
+            container.innerHTML = '';
+
+            const appIds = Object.keys(withAppId).sort();
+            
+            appIds.forEach(appId => {
+                const appData = withAppId[appId];
+                const totalCount = appData.database.length + appData.application.length + appData.platform.length;
+                
+                // Calculate compliance status
+                const compliance = calculateAppCompliance(appData);
+                
+                // Get app metadata
+                const appMetadata = appData.metadata || {};
+                const displayAppId = appMetadata.app_id || appId;
+                const displayAppName = appMetadata.app_name;
+                
+                // Create display title
+                let appTitle = `📱 ${displayAppId}`;
+                if (displayAppName && displayAppName !== displayAppId) {
+                    appTitle = `📱 ${displayAppId} - ${displayAppName}`;
+                }
+
+                const appSection = document.createElement('div');
+                appSection.className = 'mb-6';
+                appSection.innerHTML = `
+                    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-md overflow-hidden ${!compliance.overall ? 'border-2 border-red-500' : 'border-2 border-green-500'}">
+                        <div class="cursor-pointer p-5 border-b border-blue-200" onclick="toggleAppSection('${appId}')">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-3">
+                                    <svg id="icon-app-${appId}" class="expand-icon rotated w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                    <div>
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <h3 class="text-lg font-bold text-gray-800">${appTitle}</h3>
+                                            ${compliance.overall ? 
+                                                '<span class="bg-green-500 text-white text-xs px-2 py-1 rounded-full font-semibold">✓ COMPLIANT</span>' : 
+                                                '<span class="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-semibold">✗ NON-COMPLIANT</span>'
+                                            }
+                                        </div>
+                                        <p class="text-xs text-gray-600">Application Group • ${totalCount} instance${totalCount !== 1 ? 's' : ''}</p>
+                                    </div>
+                                </div>
+                                <div class="bg-blue-600 px-3 py-1 rounded-full">
+                                    <span class="text-white font-bold">${totalCount}</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Compliance Status Row -->
+                            <div class="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-blue-200">
+                                ${renderComplianceBadge(compliance.encryption, 'Encryption', '🔒')}
+                                ${renderComplianceBadge(compliance.ssl, 'SSL/TLS', '🔐')}
+                                ${renderComplianceBadge(compliance.public, 'Private', '🔒')}
+                            </div>
+                        </div>
+                        <div id="content-app-${appId}" class="category-content expanded bg-gray-50 p-4">
+                            <div class="space-y-4">
+                                ${renderAppCategory('database', appData.database, appId, 'Database', '🗄️', 'green')}
+                                ${renderAppCategory('application', appData.application, appId, 'Application', '💻', 'blue')}
+                                ${renderAppCategory('platform', appData.platform, appId, 'Platform', '🔧', 'orange')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(appSection);
+            });
+            
+            // Populate tables after DOM is updated
+            setTimeout(() => populateAppTables(withAppId), 0);
+        }
+
+        // Render category within an app
+        function renderAppCategory(catType, instances, appId, catName, icon, color) {
+            const tableId = `${appId}-${catType}-instances`;
+            return `
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <div class="cursor-pointer p-5 bg-gradient-to-r from-${color}-50 to-${color}-100 border-b" onclick="toggleSubCategory('${appId}', '${catType}')">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <svg id="icon-${appId}-${catType}" class="expand-icon rotated w-5 h-5 text-${color}-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-800">${icon} ${catName}</h3>
+                                    <p class="text-xs text-gray-600">${catName} instances</p>
+                                </div>
+                            </div>
+                            <div class="bg-${color}-600 px-3 py-1 rounded-full">
+                                <span class="text-white font-bold">${instances.length}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="content-${appId}-${catType}" class="category-content expanded">
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-gray-800 text-white">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Name</th>
+                                        <th class="px-4 py-3 text-left">ID</th>
+                                        <th class="px-4 py-3 text-left">Engine</th>
+                                        <th class="px-4 py-3 text-left">Region</th>
+                                        <th class="px-4 py-3 text-left">App ID</th>
+                                        <th class="px-4 py-3 text-center">Encryption</th>
+                                        <th class="px-4 py-3 text-center">SSL/TLS</th>
+                                        <th class="px-4 py-3 text-center">Public</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="${tableId}" class="divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Render Layer 2: Instances without APP ID
+        function renderWithoutAppIdLayer(withoutAppId) {
+            document.getElementById('without-database-count').textContent = withoutAppId.database.length;
+            document.getElementById('without-application-count').textContent = withoutAppId.application.length;
+            document.getElementById('without-platform-count').textContent = withoutAppId.platform.length;
+            
+            if (withoutAppId.database.length > 0) {
+                renderCategory('without-database', withoutAppId.database);
+            }
+            if (withoutAppId.application.length > 0) {
+                renderCategory('without-application', withoutAppId.application);
+            }
+            if (withoutAppId.platform.length > 0) {
+                renderCategory('without-platform', withoutAppId.platform);
+            }
+        }
+
+        // Toggle app section
+        function toggleAppSection(appId) {
+            const content = document.getElementById(`content-app-${appId}`);
+            const icon = document.getElementById(`icon-app-${appId}`);
+            
+            if (content.classList.contains('expanded')) {
+                content.classList.remove('expanded');
+                icon.classList.remove('rotated');
+            } else {
+                content.classList.add('expanded');
+                icon.classList.add('rotated');
+            }
+        }
+
+        // Toggle sub-category within app
+        // Populate app-specific tables
+        function populateAppTables(withAppId) {
+            Object.keys(withAppId).forEach(appId => {
+                const appData = withAppId[appId];
+                
+                // Render database instances
+                const dbTableBody = document.getElementById(`${appId}-database-instances`);
+                if (dbTableBody) {
+                    if (appData.database.length === 0) {
+                        dbTableBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No database instances in this app</td></tr>';
+                    } else {
+                        dbTableBody.innerHTML = appData.database.map((instance, index) => {
+                            const globalIndex = `${appId}-database-${index}`;
+                            return `
+                                <tr class="main-row cursor-pointer" onclick="toggleRowExpand('${globalIndex}')">
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-2">
+                                            <svg id="icon-${globalIndex}" class="expand-icon w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                            </svg>
+                                            <span class="font-medium text-gray-900">${instance.name || 'N/A'}</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.id}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.engine} ${instance.version}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.region}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.tags?.app_id || appId}</td>
+                                    <td class="px-4 py-3 text-center">${statusIcon(instance.encryption?.atRest)}</td>
+                                    <td class="px-4 py-3 text-center">${statusIcon(instance.encryption?.inTransit)}</td>
+                                    <td class="px-4 py-3 text-center">${instance.network?.publiclyAccessible ? '<svg class="w-6 h-6 text-red-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>' : '<svg class="w-6 h-6 text-green-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'}</td>
+                                </tr>
+                                <tr id="details-${globalIndex}" class="detail-row bg-gray-50">
+                                    <td colspan="8" class="px-4 py-6">
+                                        ${renderInstanceDetails(instance)}
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+                }
+                
+                // Render application instances
+                const appTableBody = document.getElementById(`${appId}-application-instances`);
+                if (appTableBody) {
+                    if (appData.application.length === 0) {
+                        appTableBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No application instances in this app</td></tr>';
+                    } else {
+                        appTableBody.innerHTML = appData.application.map((instance, index) => {
+                            const globalIndex = `${appId}-application-${index}`;
+                            return `
+                                <tr class="main-row cursor-pointer" onclick="toggleRowExpand('${globalIndex}')">
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-2">
+                                            <svg id="icon-${globalIndex}" class="expand-icon w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                            </svg>
+                                            <span class="font-medium text-gray-900">${instance.name || 'N/A'}</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.id}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.engine} ${instance.version}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.region}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.tags?.app_id || appId}</td>
+                                    <td class="px-4 py-3 text-center">${statusIcon(instance.encryption?.atRest)}</td>
+                                    <td class="px-4 py-3 text-center">${statusIcon(instance.encryption?.inTransit)}</td>
+                                    <td class="px-4 py-3 text-center">${instance.network?.publiclyAccessible ? '<svg class="w-6 h-6 text-red-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>' : '<svg class="w-6 h-6 text-green-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'}</td>
+                                </tr>
+                                <tr id="details-${globalIndex}" class="detail-row bg-gray-50">
+                                    <td colspan="8" class="px-4 py-6">
+                                        ${renderInstanceDetails(instance)}
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+                }
+                
+                // Render platform instances
+                const platformTableBody = document.getElementById(`${appId}-platform-instances`);
+                if (platformTableBody) {
+                    if (appData.platform.length === 0) {
+                        platformTableBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No platform instances in this app</td></tr>';
+                    } else {
+                        platformTableBody.innerHTML = appData.platform.map((instance, index) => {
+                            const globalIndex = `${appId}-platform-${index}`;
+                            return `
+                                <tr class="main-row cursor-pointer" onclick="toggleRowExpand('${globalIndex}')">
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-2">
+                                            <svg id="icon-${globalIndex}" class="expand-icon w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                            </svg>
+                                            <span class="font-medium text-gray-900">${instance.name || 'N/A'}</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.id}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.engine} ${instance.version}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.region}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${instance.tags?.app_id || appId}</td>
+                                    <td class="px-4 py-3 text-center">${statusIcon(instance.encryption?.atRest)}</td>
+                                    <td class="px-4 py-3 text-center">${statusIcon(instance.encryption?.inTransit)}</td>
+                                    <td class="px-4 py-3 text-center">${instance.network?.publiclyAccessible ? '<svg class="w-6 h-6 text-red-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>' : '<svg class="w-6 h-6 text-green-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'}</td>
+                                </tr>
+                                <tr id="details-${globalIndex}" class="detail-row bg-gray-50">
+                                    <td colspan="8" class="px-4 py-6">
+                                        ${renderInstanceDetails(instance)}
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+                }
+            });
+        }
+
+        function toggleSubCategory(appId, catType) {
+            const content = document.getElementById(`content-${appId}-${catType}`);
+            const icon = document.getElementById(`icon-${appId}-${catType}`);
+            
+            if (content.classList.contains('expanded')) {
+                content.classList.remove('expanded');
+                icon.classList.remove('rotated');
+            } else {
+                content.classList.add('expanded');
+                icon.classList.add('rotated');
+            }
+        }
+
+        // Render category table
+        function renderCategory(catName, categoryInstances) {
+            const tbody = document.getElementById(`${catName}-instances`);
+            
+            if (categoryInstances.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No instances in this category</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = categoryInstances.map((instance, index) => {
+                const globalIndex = `${catName}-${index}`;
+                return `
+                    <tr class="main-row cursor-pointer" onclick="toggleRowExpand('${globalIndex}')">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <svg id="icon-${globalIndex}" class="expand-icon w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <span class="font-medium text-gray-900">${instance.name || 'N/A'}</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${instance.id}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${instance.engine} ${instance.version}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${instance.region}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${instance.tags?.app_id || 'N/A'}</td>
+                        <td class="px-4 py-3 text-center">${statusIcon(instance.encryption?.atRest)}</td>
+                        <td class="px-4 py-3 text-center">${statusIcon(instance.encryption?.inTransit)}</td>
+                        <td class="px-4 py-3 text-center">${instance.network?.publiclyAccessible ? '<svg class="w-6 h-6 text-red-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>' : '<svg class="w-6 h-6 text-green-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'}</td>
+                    </tr>
+                    <tr id="details-${globalIndex}" class="detail-row bg-gray-50">
+                        <td colspan="8" class="px-4 py-6">
+                            ${renderInstanceDetails(instance)}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Render instance details (same as old dashboard)
+        function renderInstanceDetails(instance) {
+            // Debug: Log the instance data to console
+            console.log('Instance data:', instance);
+            console.log('Authentication:', instance.authentication);
+            console.log('Secrets:', instance.secrets);
+            
+            return `
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 max-w-full">
+                    <!-- Encryption Section -->
+                    <div class="bg-white rounded-lg p-4 shadow-sm">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                            Encryption
+                        </h3>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">At Rest Encryption:</span>
+                                <span class="text-xs font-medium ${instance.encryption?.atRest ? 'text-green-600' : 'text-red-600'}">
+                                    ${instance.encryption?.atRest ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">In Transit (SSL/TLS):</span>
+                                <span class="text-xs font-medium ${instance.encryption?.inTransit ? 'text-green-600' : 'text-red-600'}">
+                                    ${instance.encryption?.inTransit ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            ${instance.encryption?.inTransit ? `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs text-gray-600">SSL Enforced:</span>
+                                    <span class="text-xs font-medium ${instance.encryption?.inTransitEnforced ? 'text-green-600' : 'text-yellow-600'}">
+                                        ${instance.encryption?.inTransitEnforced ? 'Yes' : 'No'}
+                                    </span>
+                                </div>
+                            ` : ''}
+                            ${instance.encryption?.certificateExpiryDate ? `
+                                <div class="mt-3 pt-3 border-t">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-xs text-gray-600">Certificate Expires:</span>
+                                        <span class="font-medium text-sm ${
+                                            instance.encryption.certificateDaysToExpiry <= 30 ? 'text-red-600' :
+                                            instance.encryption.certificateDaysToExpiry <= 90 ? 'text-yellow-600' :
+                                            'text-gray-800'
+                                        }">
+                                            ${new Date(instance.encryption.certificateExpiryDate).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <div class="flex justify-between items-center mt-2">
+                                        <span class="text-xs text-gray-600">Days Until Expiry:</span>
+                                        <span class="font-medium text-sm ${
+                                            instance.encryption.certificateDaysToExpiry <= 30 ? 'text-red-600 font-bold' :
+                                            instance.encryption.certificateDaysToExpiry <= 90 ? 'text-yellow-600 font-semibold' :
+                                            'text-green-600'
+                                        }">
+                                            ${instance.encryption.certificateDaysToExpiry} days
+                                            ${instance.encryption.certificateDaysToExpiry <= 30 ? ' ⚠️ URGENT' :
+                                              instance.encryption.certificateDaysToExpiry <= 90 ? ' ⚡ Soon' : ''}
+                                        </span>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${instance.encryption?.kmsKeyId ? `
+                                <div class="mt-2">
+                                    <span class="text-xs text-gray-500">KMS Key: ${instance.encryption.kmsKeyId.split('/').pop()}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Network & Security -->
+                    <div class="bg-white rounded-lg p-4 shadow-sm">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
+                            </svg>
+                            Network & Access
+                        </h3>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">Publicly Accessible:</span>
+                                <span class="text-xs font-medium ${instance.network?.publiclyAccessible ? 'text-red-600' : 'text-green-600'}">
+                                    ${instance.network?.publiclyAccessible ? 'Yes ⚠️' : 'No'}
+                                </span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">IAM Authentication:</span>
+                                <span class="text-xs font-medium ${instance.authentication?.iamEnabled ? 'text-green-600' : 'text-gray-600'}">
+                                    ${instance.authentication?.iamEnabled ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            ${instance.network?.vpcId ? `
+                                <div class="mt-2 pt-2 border-t">
+                                    <span class="text-xs text-gray-500">VPC: ${instance.network.vpcId}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Authentication & Secrets Manager -->
+                    <div class="bg-white rounded-lg p-4 shadow-sm border-l-4 ${instance.secrets?.secret_arn || instance.secrets?.secret_name ? 'border-green-500' : 'border-gray-300'}">
+                        <h3 class="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                            Authentication & Secrets
+                        </h3>
+                        <div class="space-y-1.5 text-xs">
+                            <!-- Authentication Line -->
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs text-gray-600">IAM Auth:</span>
+                                    <span class="${instance.authentication?.iamEnabled ? 'text-green-600' : 'text-red-600'} flex items-center gap-0.5">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${instance.authentication?.iamEnabled ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'}"/>
+                                        </svg>
+                                        ${instance.authentication?.iamEnabled ? 'On' : 'Off'}
+                                    </span>
+                                </div>
+                                <span class="text-gray-400">|</span>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs text-gray-600">Password Rotation:</span>
+                                    <span class="${instance.authentication?.passwordRotation ? 'text-green-600' : 'text-red-600'} flex items-center gap-0.5">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${instance.authentication?.passwordRotation ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'}"/>
+                                        </svg>
+                                        ${instance.authentication?.passwordRotation ? 'On' : 'Off'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            ${instance.secrets?.secret_arn || instance.secrets?.secret_name ? `
+                                <!-- Secrets Manager Line 1 -->
+                                <div class="flex items-center gap-2 pt-1 border-t border-gray-200">
+                                    <span class="text-gray-600 font-medium">Secret:</span>
+                                    <span class="text-green-600 flex items-center gap-1">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        Managed
+                                    </span>
+                                    <span class="text-gray-400">|</span>
+                                    <code class="text-gray-600 truncate max-w-md">${instance.secrets?.secret_name || instance.secrets?.secret_arn || 'N/A'}</code>
+                                </div>
+                                <!-- Secrets Manager Line 2 -->
+                                <div class="flex items-center gap-3 flex-wrap">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-xs text-gray-600">Interval:</span>
+                                        <span class="font-medium">${instance.secrets?.rotation_days || '7'} days</span>
+                                    </div>
+                                    ${instance.secrets?.last_rotated ? `
+                                        <span class="text-gray-400">|</span>
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-xs text-gray-600">Last:</span>
+                                            <span class="font-medium">${new Date(instance.secrets.last_rotated).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}</span>
+                                        </div>
+                                    ` : ''}
+                                    <span class="text-gray-400">|</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-xs text-gray-600">Auto:</span>
+                                        <span class="${instance.secrets?.auto_rotation || instance.secrets?.rotation_enabled ? 'text-green-600' : 'text-red-600'} flex items-center gap-0.5">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${instance.secrets?.auto_rotation || instance.secrets?.rotation_enabled ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'}"/>
+                                            </svg>
+                                            ${instance.secrets?.auto_rotation || instance.secrets?.rotation_enabled ? 'On' : 'Off'}
+                                        </span>
+                                    </div>
+                                    ${instance.secrets?.rotation_days !== null && instance.secrets?.rotation_days !== undefined ? `
+                                        <span class="text-gray-400">|</span>
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-xs text-gray-600">Days:</span>
+                                            <span class="font-bold ${
+                                                instance.secrets.rotation_days > 90 ? 'text-red-600' :
+                                                instance.secrets.rotation_days > 60 ? 'text-yellow-600' :
+                                                'text-green-600'
+                                            }">${instance.secrets.rotation_days}${instance.secrets.rotation_days > 90 ? '⚠️' : instance.secrets.rotation_days > 60 ? '⚡' : ''}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            ` : `
+                                <div class="text-gray-500 pt-1 border-t border-gray-200">⚠️ No Secrets Manager configured</div>
+                            `}
+                        </div>
+                    </div>
+
+                    <!-- Monitoring, Backups & Tags -->
+                    <div class="bg-white rounded-lg p-4 shadow-sm">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                            </svg>
+                            Monitoring, Backups & Tags
+                        </h3>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">Enhanced Monitoring:</span>
+                                <span class="text-xs font-medium ${instance.monitoring?.enhancedMonitoring ? 'text-green-600' : 'text-gray-600'}">
+                                    ${instance.monitoring?.enhancedMonitoring ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">Performance Insights:</span>
+                                <span class="text-xs font-medium ${instance.monitoring?.performanceInsights ? 'text-green-600' : 'text-gray-600'}">
+                                    ${instance.monitoring?.performanceInsights ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-600">Automated Backups:</span>
+                                <span class="text-xs font-medium ${instance.backups?.automated ? 'text-green-600' : 'text-red-600'}">
+                                    ${instance.backups?.automated ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            ${instance.backups?.retentionDays ? `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs text-gray-600">Retention Period:</span>
+                                    <span class="font-medium">${instance.backups.retentionDays} days</span>
+                                </div>
+                            ` : ''}
+                            ${instance.backups?.encrypted !== undefined ? `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs text-gray-600">Backup Encryption:</span>
+                                    <span class="text-xs font-medium ${instance.backups.encrypted ? 'text-green-600' : 'text-red-600'}">
+                                        ${instance.backups.encrypted ? 'Enabled' : 'Disabled'}
+                                    </span>
+                                </div>
+                            ` : ''}
+                            
+                            ${Object.entries(instance.tags || {}).length > 0 ? `
+                                <div class="mt-4 pt-4 border-t border-gray-200">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 4 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                                        </svg>
+                                        <span class="text-sm font-semibold text-gray-700">Tags</span>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2 text-sm">
+                                        ${Object.entries(instance.tags || {}).map(([key, value]) => `
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-xs text-gray-600">${key}:</span>
+                                                <span class="font-medium text-gray-900 truncate">${value}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    </div>
+                </div>
+            `;
+        }
+
+        function statusIcon(enabled) {
+            return enabled ? 
+                '<svg class="w-6 h-6 text-green-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' :
+                '<svg class="w-6 h-6 text-red-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+        }
+
+        function updateStats() {
+            document.getElementById('statTotal').textContent = instances.length;
+            document.getElementById('statEncrypted').textContent = instances.filter(i => i.encryption?.atRest).length;
+            document.getElementById('statSSL').textContent = instances.filter(i => i.encryption?.inTransit).length;
+            document.getElementById('statCertExpiring').textContent = instances.filter(i => 
+                i.encryption?.certificateDaysToExpiry !== null && i.encryption?.certificateDaysToExpiry <= 90
+            ).length;
+            document.getElementById('statPublic').textContent = instances.filter(i => i.network?.publiclyAccessible).length;
+        }
+
+        // Export CSV
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            const csv = [
+                ['Category', 'Name', 'ID', 'Engine', 'Region', 'App ID', 'Encryption', 'SSL/TLS', 'Public', 'Cert Expiry', 'Days to Expiry'].join(','),
+                ...instances.map(inst => {
+                    const comp = (inst.tags?.Component || inst.tags?.component || 'database').toUpperCase();
+                    return [
+                        comp,
+                        inst.name,
+                        inst.id,
+                        `${inst.engine} ${inst.version}`,
+                        inst.region,
+                        inst.tags?.app_id || 'N/A',
+                        inst.encryption?.atRest ? 'Yes' : 'No',
+                        inst.encryption?.inTransit ? 'Yes' : 'No',
+                        inst.network?.publiclyAccessible ? 'Yes' : 'No',
+                        inst.encryption?.certificateExpiryDate ? new Date(inst.encryption.certificateExpiryDate).toLocaleDateString() : 'N/A',
+                        inst.encryption?.certificateDaysToExpiry !== null ? inst.encryption.certificateDaysToExpiry : 'N/A'
+                    ].join(',');
+                })
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `security-audit-${Date.now()}.csv`;
+            a.click();
+        });
+        // Override renderInstanceDetails to handle EC2
+        const originalRenderInstanceDetails = renderInstanceDetails;
+
+        renderInstanceDetails = function(instance) {
+            const isEC2 = instance.resourceType === 'EC2' || instance.instanceType;
+            
+            if (isEC2) {
+                // EC2 instance - show storage, network, IMDSv2, etc.
+                const storage = instance.storage || {};
+                const network = instance.network || {};
+                const metadata = instance.metadata || {};
+                
+                return `
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div class="bg-white rounded-lg p-4 shadow-sm">
+                            <h3 class="text-sm font-semibold mb-2">🗄️ Storage</h3>
+                            <div class="space-y-2">
+                                <div class="flex justify-between">
+                                    <span class="text-xs text-gray-600">Volumes:</span>
+                                    <span class="text-xs">${storage.totalVolumes || 0}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-xs text-gray-600">Encrypted:</span>
+                                    <span class="text-xs ${storage.allEncrypted ? 'text-green-600' : 'text-red-600'}">
+                                        ${storage.encryptedVolumes}/${storage.totalVolumes}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-lg p-4 shadow-sm">
+                            <h3 class="text-sm font-semibold mb-2">🌐 Network</h3>
+                            <div class="space-y-2">
+                                <div class="flex justify-between">
+                                    <span class="text-xs text-gray-600">Public IP:</span>
+                                    <span class="text-xs ${network.hasPublicIp ? 'text-yellow-600' : 'text-green-600'}">
+                                        ${network.hasPublicIp ? 'Yes' : 'No'}
+                                    </span>
+                                </div>
+                                ${network.riskyPorts?.length > 0 ? 
+                                    `<div class="text-xs px-2 py-1 bg-red-100 text-red-800 rounded">
+                                        ${network.riskyPorts.map(p => p.service).join(', ')}
+                                    </div>` : ''
+                                }
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-lg p-4 shadow-sm">
+                            <h3 class="text-sm font-semibold mb-2">🔑 Security</h3>
+                            <div class="space-y-2">
+                                <div class="flex justify-between">
+                                    <span class="text-xs text-gray-600">IMDSv2:</span>
+                                    <span class="text-xs ${metadata.imdsv2Required ? 'text-green-600' : 'text-yellow-600'}">
+                                        ${metadata.imdsv2Required ? 'Required' : 'Optional'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-lg p-4 shadow-sm">
+                            <h3 class="text-sm font-semibold mb-2">📊 Info</h3>
+                            <div class="space-y-2">
+                                <div class="flex justify-between">
+                                    <span class="text-xs text-gray-600">Type:</span>
+                                    <span class="text-xs">${instance.instanceType || 'N/A'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // RDS instance - use original rendering
+                return originalRenderInstanceDetails(instance);
+            }
+        };
+
+        console.log('EC2 Platform Enhancement Loaded ✓');
+    </script>
+    <!-- AI Chatbot -->
+    <div id="chatbot-container">
+        <!-- Floating Chat Button -->
+        <button id="chat-toggle-btn" class="fixed bottom-6 right-6 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full p-4 shadow-2xl hover:shadow-3xl transform hover:scale-110 transition-all duration-300 z-50" onclick="toggleChat()">
+            <svg id="chat-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+            </svg>
+            <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">AI</span>
+        </button>
+
+        <!-- Chat Window -->
+        <div id="chat-window" class="fixed bottom-24 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl hidden flex-col z-50 border-2 border-purple-200">
+            <!-- Chat Header -->
+            <div class="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-4 rounded-t-2xl flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="bg-white/20 p-2 rounded-full">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg">Security Assistant</h3>
+                        <p class="text-xs text-purple-100">Ask about your infrastructure</p>
+                    </div>
+                </div>
+                <button onclick="toggleChat()" class="hover:bg-white/20 p-2 rounded-full transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Chat Messages -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+                <!-- Welcome Message -->
+                <div class="flex items-start gap-3">
+                    <div class="bg-gradient-to-r from-purple-500 to-blue-500 p-2 rounded-full flex-shrink-0">
+                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <div class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[80%]">
+                        <p class="text-sm text-gray-800">👋 Hi! I'm your Security Assistant powered by AWS Bedrock (Claude 3). I can help you analyze your infrastructure with intelligent insights.</p>
+                        <p class="text-xs text-gray-500 mt-2">Try asking:</p>
+                        <ul class="text-xs text-gray-600 mt-1 space-y-1">
+                            <li>• "Show me non-compliant instances"</li>
+                            <li>• "Which databases have encryption disabled?"</li>
+                            <li>• "Count instances by app_id"</li>
+                            <li>• "List all public instances"</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Input -->
+            <div class="p-4 border-t border-gray-200 bg-white rounded-b-2xl">
+                <div class="flex gap-2">
+                    <input 
+                        type="text" 
+                        id="chat-input" 
+                        placeholder="Ask about your infrastructure..." 
+                        class="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                        onkeypress="handleChatKeyPress(event)"
+                    />
+                    <button 
+                        onclick="sendChatMessage()" 
+                        class="bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full p-2 hover:shadow-lg transition-all duration-300"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex gap-2 mt-2 flex-wrap">
+                    <button onclick="quickQuestion('Show non-compliant instances')" class="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full hover:bg-purple-200 transition">
+                        Non-compliant
+                    </button>
+                    <button onclick="quickQuestion('Count by app_id')" class="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full hover:bg-blue-200 transition">
+                        Count by app
+                    </button>
+                    <button onclick="quickQuestion('List public instances')" class="text-xs bg-red-100 text-red-700 px-3 py-1 rounded-full hover:bg-red-200 transition">
+                        Public instances
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Chat functions
+        function toggleChat() {
+            const chatWindow = document.getElementById('chat-window');
+            const isHidden = chatWindow.classList.contains('hidden');
+            
+            if (isHidden) {
+                chatWindow.classList.remove('hidden');
+                chatWindow.classList.add('flex');
+                document.getElementById('chat-input').focus();
+            } else {
+                chatWindow.classList.add('hidden');
+                chatWindow.classList.remove('flex');
+            }
+        }
+
+        function handleChatKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendChatMessage();
+            }
+        }
+
+        function quickQuestion(question) {
+            document.getElementById('chat-input').value = question;
+            sendChatMessage();
+        }
+
+        function addChatMessage(message, isUser = false, messageId = null) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`;
+            if (messageId) {
+                messageDiv.id = `msg-${messageId}`;
+            }
+            
+            if (isUser) {
+                messageDiv.innerHTML = `
+                    <div class="bg-gradient-to-r from-purple-600 to-blue-600 p-2 rounded-full flex-shrink-0">
+                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                        </svg>
+                    </div>
+                    <div class="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-3 rounded-2xl rounded-tr-none shadow-sm max-w-[80%]">
+                        <p class="text-sm">${message}</p>
+                    </div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="bg-gradient-to-r from-purple-500 to-blue-500 p-2 rounded-full flex-shrink-0">
+                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <div class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[80%]">
+                        <div class="text-sm text-gray-800">${message}</div>
+                    </div>
+                `;
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message
+            addChatMessage(message, true);
+            input.value = '';
+            
+            // Show thinking indicator
+            const thinkingId = Date.now();
+            addChatMessage('<div class="flex items-center gap-2"><div class="animate-spin h-4 w-4 border-2 border-purple-600 rounded-full border-t-transparent"></div><span class="text-gray-500">Analyzing...</span></div>', false, thinkingId);
+            
+            // Process query via backend API
+            try {
+                const response = await fetch(AI_API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY  // Use same API key
+                    },
+                    body: JSON.stringify({
+                        query: message
+                    })
+                });
+                
+                // Remove thinking indicator
+                const thinkingMsg = document.getElementById(`msg-${thinkingId}`);
+                if (thinkingMsg) thinkingMsg.remove();
+                
+                if (!response.ok) {
+                    addChatMessage('⚠️ Backend API error. Using local data analysis...');
+                    // Fallback to local processing
+                    const localResponse = processAIQueryLocal(message);
+                    addChatMessage(localResponse);
+                    return;
+                }
+                
+                const data = await response.json();
+                const formattedResponse = formatAIResponse(data);
+                addChatMessage(formattedResponse);
+                
+            } catch (error) {
+                console.error('AI API Error:', error);
+                // Remove thinking indicator
+                const thinkingMsg = document.getElementById(`msg-${thinkingId}`);
+                if (thinkingMsg) thinkingMsg.remove();
+                
+                addChatMessage('⚠️ Could not connect to AI backend. Using local data...');
+                // Fallback to local processing
+                const localResponse = processAIQueryLocal(message);
+                addChatMessage(localResponse);
+            }
+        }
+
+        function formatAIResponse(apiResponse) {
+            if (!apiResponse.success) {
+                return `❌ Error: ${apiResponse.error}`;
+            }
+            
+            // Check if response contains Bedrock AI response (natural language)
+            if (apiResponse.response) {
+                // Bedrock AI response - return as-is (already formatted by Claude)
+                return apiResponse.response;
+            }
+            
+            // Legacy format for fallback responses
+            const data = apiResponse.data;
+            
+            // If data is undefined or null, return a default message
+            if (!data) {
+                return apiResponse.message || '🤖 AI response received. Please try asking another question.';
+            }
+            
+            // Format based on query type (for fallback responses)
+            switch (data.query_type) {
+                case 'non_compliant':
+                    if (data.total_count === 0) {
+                        return '✅ Great news! All instances are compliant.';
+                    }
+                    let response = `⚠️ Found ${data.total_count} non-compliant instance(s):\\n\\n`;
+                    data.results.forEach(inst => {
+                        response += `• ${inst.name} (${inst.type.toUpperCase()})\\n`;
+                        response += `  App: ${inst.app_id} | Region: ${inst.region}\\n`;
+                        response += `  Issues: ${inst.issues.join(', ')}\\n\\n`;
+                    });
+                    return response;
+                
+                case 'encryption':
+                    if (data.total_count === 0) {
+                        return '✅ All instances have encryption enabled!';
+                    }
+                    response = `🔒 Found ${data.total_count} instance(s) without encryption:\\n\\n`;
+                    data.results.forEach(inst => {
+                        response += `• ${inst.name} (${inst.type.toUpperCase()})\\n`;
+                        response += `  App: ${inst.app_id} | Region: ${inst.region}\\n`;
+                    });
+                    return response;
+                
+                case 'public':
+                    if (data.total_count === 0) {
+                        return '✅ No publicly accessible instances found!';
+                    }
+                    response = `🌐 Found ${data.total_count} public instance(s):\\n\\n`;
+                    data.results.forEach(inst => {
+                        response += `• ${inst.name} (${inst.type.toUpperCase()})\\n`;
+                        response += `  ${inst.details}\\n`;
+                        response += `  App: ${inst.app_id} | Region: ${inst.region}\\n\\n`;
+                    });
+                    return response;
+                
+                case 'count_by_app':
+                    response = `📊 Instance count by APP ID:\\n\\n`;
+                    data.results.forEach(app => {
+                        response += `• ${app.app_id}: ${app.total} total`;
+                        if (app.rds > 0 || app.ec2 > 0) {
+                            response += ` (RDS: ${app.rds}, EC2: ${app.ec2})`;
+                        }
+                        response += `\\n`;
+                    });
+                    response += `\\n📈 Total: ${data.total_instances} instances across ${data.total_apps} apps`;
+                    return response;
+                
+                case 'rds_summary':
+                    response = `🗄️ RDS Database Summary:\\n\\n`;
+                    response += `Total RDS instances: ${data.total_rds}\\n\\n`;
+                    response += `By engine:\\n`;
+                    Object.entries(data.engines).forEach(([engine, count]) => {
+                        response += `• ${engine}: ${count}\\n`;
+                    });
+                    return response;
+                
+                case 'ec2_summary':
+                    response = `💻 EC2 Instance Summary:\\n\\n`;
+                    response += `Total EC2 instances: ${data.total_ec2}\\n\\n`;
+                    response += `Top instance types:\\n`;
+                    Object.entries(data.instance_types).sort((a, b) => b[1] - a[1]).slice(0, 5).forEach(([type, count]) => {
+                        response += `• ${type}: ${count}\\n`;
+                    });
+                    return response;
+                
+                case 'list_all':
+                    response = `📋 Instance Summary:\\n\\n`;
+                    response += `Total: ${data.total_count} (RDS: ${data.rds_count}, EC2: ${data.ec2_count})\\n\\n`;
+                    response += `Showing first ${Math.min(15, data.results.length)} instances:\\n`;
+                    data.results.slice(0, 15).forEach(inst => {
+                        response += `• ${inst.name} (${inst.type.toUpperCase()}, App: ${inst.app_id})\\n`;
+                    });
+                    if (data.total_count > 15) {
+                        response += `\\n...and ${data.total_count - 15} more`;
+                    }
+                    return response;
+                
+                case 'region_specific':
+                    response = `📍 Instances in ${data.region}:\\n\\n`;
+                    response += `Total: ${data.total_count}\\n\\n`;
+                    data.results.forEach(inst => {
+                        response += `• ${inst.name} (${inst.type.toUpperCase()}, App: ${inst.app_id})\\n`;
+                    });
+                    return response;
+                
+                case 'summary':
+                default:
+                    response = `📊 Infrastructure Summary:\\n\\n`;
+                    response += `Total instances: ${data.total_instances}\\n`;
+                    response += `• RDS: ${data.rds_count}\\n`;
+                    response += `• EC2: ${data.ec2_count}\\n\\n`;
+                    response += data.message || 'Try asking specific questions!';
+                    return response;
+            }
+        }
+
+        function processAIQueryLocal(query) {
+            const lowerQuery = query.toLowerCase();
+            
+            // Check if data is loaded
+            if (!instances || instances.length === 0) {
+                return '⚠️ No data loaded yet. Please click "Load Latest Data" first.';
+            }
+
+            // Non-compliant instances
+            if (lowerQuery.includes('non-compliant') || lowerQuery.includes('issue') || lowerQuery.includes('problem')) {
+                const nonCompliant = instances.filter(inst => {
+                    const type = getInstanceType(inst);
+                    if (type === 'ec2') {
+                        return !inst.encryption?.ebs_encrypted || 
+                               inst.network?.has_public_ssh || 
+                               inst.network?.has_public_rdp;
+                    } else {
+                        return !inst.encryption?.atRest || 
+                               !inst.encryption?.inTransit || 
+                               inst.network?.publiclyAccessible;
+                    }
+                });
+                
+                if (nonCompliant.length === 0) {
+                    return '✅ Great news! All instances are compliant.';
+                }
+                
+                let response = `⚠️ Found ${nonCompliant.length} non-compliant instance(s):\n\n`;
+                nonCompliant.slice(0, 10).forEach(inst => {
+                    const issues = [];
+                    if (!inst.encryption?.atRest && !inst.encryption?.ebs_encrypted) issues.push('No encryption');
+                    if (!inst.encryption?.inTransit) issues.push('No SSL/TLS');
+                    if (inst.network?.publiclyAccessible || inst.network?.has_public_ssh) issues.push('Public access');
+                    response += `• ${inst.name || inst.instance_id}: ${issues.join(', ')}\n`;
+                });
+                
+                if (nonCompliant.length > 10) {
+                    response += `\n...and ${nonCompliant.length - 10} more`;
+                }
+                
+                return response;
+            }
+
+            // Encryption issues
+            if (lowerQuery.includes('encryption') || lowerQuery.includes('encrypted')) {
+                const unencrypted = instances.filter(inst => {
+                    const type = getInstanceType(inst);
+                    return type === 'ec2' ? !inst.encryption?.ebs_encrypted : !inst.encryption?.atRest;
+                });
+                
+                if (unencrypted.length === 0) {
+                    return '✅ All instances have encryption enabled!';
+                }
+                
+                let response = `🔒 Found ${unencrypted.length} instance(s) without encryption:\n\n`;
+                unencrypted.slice(0, 10).forEach(inst => {
+                    const appId = inst.tags?.app_id || 'N/A';
+                    response += `• ${inst.name || inst.instance_id} (App: ${appId})\n`;
+                });
+                return response;
+            }
+
+            // Public instances
+            if (lowerQuery.includes('public')) {
+                const publicInstances = instances.filter(inst => {
+                    const type = getInstanceType(inst);
+                    return type === 'ec2' ? 
+                        (inst.network?.has_public_ip && (inst.network?.has_public_ssh || inst.network?.has_public_rdp)) :
+                        inst.network?.publiclyAccessible;
+                });
+                
+                if (publicInstances.length === 0) {
+                    return '✅ No publicly accessible instances found!';
+                }
+                
+                let response = `🌐 Found ${publicInstances.length} public instance(s):\n\n`;
+                publicInstances.slice(0, 10).forEach(inst => {
+                    const type = getInstanceType(inst);
+                    const details = type === 'ec2' ? 
+                        `IP: ${inst.public_ip || 'N/A'}` : 
+                        'RDS publicly accessible';
+                    response += `• ${inst.name || inst.instance_id} - ${details}\n`;
+                });
+                return response;
+            }
+
+            // Count by app_id
+            if (lowerQuery.includes('count') || lowerQuery.includes('summary') || lowerQuery.includes('app')) {
+                const appCounts = {};
+                instances.forEach(inst => {
+                    const appId = inst.tags?.app_id || 'No APP ID';
+                    appCounts[appId] = (appCounts[appId] || 0) + 1;
+                });
+                
+                let response = '📊 Instance count by APP ID:\n\n';
+                Object.entries(appCounts).sort((a, b) => b[1] - a[1]).forEach(([app, count]) => {
+                    response += `• ${app}: ${count} instance(s)\n`;
+                });
+                response += `\n📈 Total: ${instances.length} instances`;
+                return response;
+            }
+
+            // RDS specific
+            if (lowerQuery.includes('rds') || lowerQuery.includes('database')) {
+                const rdsInstances = instances.filter(inst => getInstanceType(inst) === 'rds');
+                let response = `🗄️ RDS Database Summary:\n\n`;
+                response += `Total RDS instances: ${rdsInstances.length}\n\n`;
+                
+                const engines = {};
+                rdsInstances.forEach(inst => {
+                    const engine = inst.engine || 'unknown';
+                    engines[engine] = (engines[engine] || 0) + 1;
+                });
+                
+                response += 'By engine:\n';
+                Object.entries(engines).forEach(([engine, count]) => {
+                    response += `• ${engine}: ${count}\n`;
+                });
+                
+                return response;
+            }
+
+            // EC2 specific
+            if (lowerQuery.includes('ec2') || lowerQuery.includes('server')) {
+                const ec2Instances = instances.filter(inst => getInstanceType(inst) === 'ec2');
+                let response = `💻 EC2 Instance Summary:\n\n`;
+                response += `Total EC2 instances: ${ec2Instances.length}\n\n`;
+                
+                const types = {};
+                ec2Instances.forEach(inst => {
+                    const type = inst.instance_type || 'unknown';
+                    types[type] = (types[type] || 0) + 1;
+                });
+                
+                response += 'By instance type:\n';
+                Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 5).forEach(([type, count]) => {
+                    response += `• ${type}: ${count}\n`;
+                });
+                
+                return response;
+            }
+
+            // List all instances
+            if (lowerQuery.includes('list') || lowerQuery.includes('show all')) {
+                let response = `📋 All Instances (showing first 15):\n\n`;
+                instances.slice(0, 15).forEach(inst => {
+                    const type = getInstanceType(inst);
+                    const appId = inst.tags?.app_id || 'N/A';
+                    response += `• ${inst.name || inst.instance_id} (${type.toUpperCase()}, App: ${appId})\n`;
+                });
+                
+                if (instances.length > 15) {
+                    response += `\n...and ${instances.length - 15} more instances`;
+                }
+                
+                return response;
+            }
+
+            // Help
+            if (lowerQuery.includes('help') || lowerQuery.includes('what can')) {
+                return `💡 I can help you with:\n\n` +
+                       `• Find non-compliant instances\n` +
+                       `• Check encryption status\n` +
+                       `• List public instances\n` +
+                       `• Count instances by app_id\n` +
+                       `• Summarize RDS or EC2 instances\n` +
+                       `• Search by region, engine, or type\n\n` +
+                       `Try asking: "Show me non-compliant instances"`;
+            }
+
+            // Default response
+            return `🤔 I'm not sure about that. Try:\n\n` +
+                   `• "Show non-compliant instances"\n` +
+                   `• "List public instances"\n` +
+                   `• "Count by app_id"\n` +
+                   `• "Help" for more options`;
+        }
+    </script>
+</body>
+</html>
