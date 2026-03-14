@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 http = urllib3.PoolManager()
 
 # Your existing API endpoint
-EXISTING_API_ENDPOINT = 'https://qknyl8fst0.execute-api.us-west-2.amazonaws.com/prod/instances'
-EXISTING_API_KEY = 'pw9aJ94jdb2MEiM3m5R6b7RscmnqrFCY4TWf7Hga'
+EXISTING_API_ENDPOINT = '<APIENDPOINT'
+EXISTING_API_KEY = 'APIKEY'
 
 def lambda_handler(event, context):
     """Main handler for AI queries with Bedrock"""
