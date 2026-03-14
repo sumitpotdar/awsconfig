@@ -16,7 +16,7 @@ table = dynamodb.Table(DYNAMODB_TABLE)
 
 # Account configuration
 ACCOUNTS = [
-    {'account_id': '243762578311', 'name': 'Sumit'}
+        {'account_id': '<Account>', 'name': '<AccountName>'}
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
