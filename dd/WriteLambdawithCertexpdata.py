@@ -15,7 +15,7 @@ table = dynamodb.Table(DYNAMODB_TABLE)
 
 # Account configuration - Can be loaded from Parameter Store or DynamoDB
 ACCOUNTS = [
-    {'account_id': '243762578311', 'name': 'Sumit'}
+        {'account_id': '<Account>', 'name': '<AccountName>'}
     # {'account_id': '111111111111', 'name': 'Production'},
     # {'account_id': '222222222222', 'name': 'Development'},
     # {'account_id': '333333333333', 'name': 'Staging'},
