@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MAPI</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #f0f2f5;
+    --surface: #ffffff;
+    --surface2: #f4f6f9;
+    --border: #e2e6ed;
+    --accent: #0057ff;
+    --accent2: #7c3aed;
+    --green: #12b76a;
+    --red: #f04438;
+    --orange: #f79009;
+    --yellow: #d4a200;
+    --text: #1a1d23;
+    --muted: #6b7280;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Syne', sans-serif;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    height: 54px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+    flex-shrink: 0;
+    box-shadow: var(--shadow);
+    z-index: 10;
+  }
+  .logo { font-size: 19px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; }
+  .logo span { color: var(--text); }
+  .backend-url-wrap {
+    display: flex; align-items: center; gap: 8px;
+    margin-left: auto;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 12px;
+  }
+  .backend-url-wrap label { font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .backend-url-input {
+    background: transparent; border: none; outline: none;
+    font-family: var(--mono); font-size: 12px; color: var(--text);
+    width: 240px;
+  }
+  .backend-status { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .backend-status.ok { background: var(--green); }
+  .backend-status.err { background: var(--red); }
+
+  /* ── LAYOUT ── */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 264px; min-width: 220px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden; flex-shrink: 0;
+    box-shadow: var(--shadow);
+  }
+  .sidebar-header {
+    padding: 14px 14px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .sidebar-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); }
+  .btn-icon {
+    background: none; border: 1px solid var(--border); color: var(--text);
+    cursor: pointer; border-radius: 6px; width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+    transition: all 0.15s;
+  }
+  .btn-icon:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+
+  .collection-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .collection-list::-webkit-scrollbar { width: 4px; }
+  .collection-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .sidebar-footer {
+    border-top: 1px solid var(--border); padding: 10px 12px; flex-shrink: 0;
+  }
+  .btn-add-folder {
+    width: 100%; background: none; border: 1px dashed var(--border);
+    color: var(--muted); font-family: var(--sans); font-size: 12px; font-weight: 600;
+    padding: 7px; border-radius: 7px; cursor: pointer; transition: all 0.15s;
+  }
+  .btn-add-folder:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .root-folder-label {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px 4px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
+    user-select: none;
+  }
+  .root-folder-label .root-icon { font-size: 13px; }
+
+  .dept-group { margin-bottom: 2px; }
+  .dept-header {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px; border-radius: 7px; cursor: pointer;
+    font-size: 12px; font-weight: 700; color: var(--text);
+    transition: background 0.12s; user-select: none;
+  }
+  .dept-header:hover { background: var(--surface2); }
+  .dept-header .caret { font-size: 9px; color: var(--muted); transition: transform 0.2s; flex-shrink: 0; }
+  .dept-header.open .caret { transform: rotate(90deg); }
+  .dept-header .dept-badge {
+    margin-left: auto; font-size: 9px; font-weight: 700;
+    padding: 1px 6px; border-radius: 10px;
+    background: var(--surface2); color: var(--muted);
+  }
+
+  .custom-section-label {
+    display: flex; align-items: center; gap: 6px;
+    padding: 10px 10px 4px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
+    border-top: 1px solid var(--border); margin-top: 6px; user-select: none;
+  }
+
+  .col-del-btn { opacity: 0; font-size: 11px; color: var(--red); cursor: pointer; padding: 0 2px; margin-left: auto; }
+  .dept-header:hover .col-del-btn { opacity: 1; }
+
+  .collection-group { margin-bottom: 2px; }
+  .collection-name {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 10px; border-radius: 7px; cursor: pointer;
+    font-size: 12px; font-weight: 700; color: var(--text);
+    transition: background 0.12s; user-select: none;
+  }
+  .collection-name:hover { background: var(--surface2); }
+  .collection-name .caret { font-size: 9px; color: var(--muted); transition: transform 0.2s; }
+  .collection-name.open .caret { transform: rotate(90deg); }
+
+  .request-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px 6px 24px; border-radius: 7px; cursor: pointer;
+    font-size: 12px; color: var(--muted); transition: all 0.12s;
+  }
+  .request-item:hover { background: var(--surface2); color: var(--text); }
+  .request-item.active { background: #eff6ff; color: var(--accent); }
+  .method-badge {
+    font-family: var(--mono); font-size: 9px; font-weight: 700;
+    padding: 2px 5px; border-radius: 4px; min-width: 38px; text-align: center;
+  }
+  .req-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .del-btn { opacity: 0; font-size: 12px; color: var(--red); cursor: pointer; }
+  .request-item:hover .del-btn { opacity: 1; }
+
+  /* ── WORKSPACE ── */
+  .workspace { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── URL BAR ── */
+  .url-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px; border-bottom: 1px solid var(--border);
+    background: var(--surface); flex-shrink: 0; box-shadow: var(--shadow);
+  }
+  select.method-select {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 13px; font-weight: 700;
+    padding: 8px 12px; border-radius: 8px; cursor: pointer; outline: none;
+    transition: border-color 0.15s;
+  }
+  select.method-select:focus { border-color: var(--accent); }
+  select option { background: #fff; color: #1a1d23; }
+
+  .url-input {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 13px;
+    padding: 8px 14px; border-radius: 8px; outline: none; transition: border-color 0.15s;
+  }
+  .url-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,87,255,0.08); }
+  .url-input::placeholder { color: var(--muted); }
+
+  .btn-send {
+    background: var(--accent); color: #fff; border: none;
+    font-family: var(--sans); font-size: 13px; font-weight: 700;
+    padding: 8px 22px; border-radius: 8px; cursor: pointer;
+    transition: all 0.15s; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,87,255,0.25);
+  }
+  .btn-send:hover { background: #0040cc; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,87,255,0.35); }
+  .btn-send:active { transform: none; }
+  .btn-send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .btn-save {
+    background: transparent; border: 1px solid var(--border); color: var(--text);
+    font-family: var(--sans); font-size: 13px; font-weight: 600;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-save:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.7s linear infinite; display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── SPLIT PANE ── */
+  .split-pane { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── REQUEST PANEL ── */
+  .request-panel {
+    width: 46%; min-width: 280px;
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--border); overflow: hidden;
+    background: var(--surface);
+  }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex; border-bottom: 1px solid var(--border);
+    background: var(--surface2); padding: 0 12px; flex-shrink: 0;
+  }
+  .tab {
+    padding: 10px 14px; font-size: 12px; font-weight: 600; color: var(--muted);
+    cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
+
+  .tab-content { flex: 1; overflow-y: auto; padding: 16px; display: none; flex-direction: column; gap: 10px; }
+  .tab-content.active { display: flex; }
+  .tab-content::-webkit-scrollbar { width: 4px; }
+  .tab-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* ── KV TABLE ── */
+  .kv-table { display: flex; flex-direction: column; gap: 6px; }
+  .kv-row { display: flex; gap: 8px; align-items: center; }
+  .kv-row input {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 12px;
+    padding: 7px 10px; border-radius: 7px; outline: none; transition: border-color 0.15s;
+  }
+  .kv-row input:focus { border-color: var(--accent); }
+  .kv-row input::placeholder { color: var(--muted); }
+  .kv-delete {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 17px; padding: 4px; border-radius: 4px; line-height: 1; transition: color 0.12s;
+  }
+  .kv-delete:hover { color: var(--red); }
+  .btn-add-row {
+    background: none; border: 1px dashed var(--border); color: var(--muted);
+    font-family: var(--sans); font-size: 12px; padding: 7px 14px;
+    border-radius: 7px; cursor: pointer; transition: all 0.15s; text-align: left;
+  }
+  .btn-add-row:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── BODY ── */
+  .body-type-row { display: flex; gap: 8px; flex-shrink: 0; }
+  .body-type-btn {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+    font-family: var(--sans); font-size: 12px; font-weight: 600; padding: 5px 12px;
+    border-radius: 6px; cursor: pointer; transition: all 0.15s;
+  }
+  .body-type-btn.active { background: #eff6ff; border-color: var(--accent); color: var(--accent); }
+  .body-textarea {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 12px;
+    padding: 12px; border-radius: 8px; resize: none; outline: none;
+    min-height: 180px; transition: border-color 0.15s; line-height: 1.6;
+  }
+  .body-textarea:focus { border-color: var(--accent); }
+  .body-textarea::placeholder { color: var(--muted); }
+
+  /* ── AUTH ── */
+  .auth-type-row { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+  .section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .auth-fields { display: flex; flex-direction: column; gap: 8px; }
+  .auth-field label { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 3px; display: block; }
+  .auth-field input {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 12px;
+    padding: 8px 10px; border-radius: 7px; outline: none; transition: border-color 0.15s;
+  }
+  .auth-field input:focus { border-color: var(--accent); }
+
+  /* ── RESPONSE PANEL ── */
+  .response-panel {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--surface);
+  }
+
+  .response-meta {
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 16px; background: var(--surface2);
+    border-bottom: 1px solid var(--border); flex-shrink: 0; min-height: 44px;
+  }
+  .status-badge {
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    padding: 3px 10px; border-radius: 6px;
+  }
+  .status-2xx { background: #d1fadf; color: #027a48; }
+  .status-3xx { background: #fef3c7; color: #b45309; }
+  .status-4xx { background: #fee4e2; color: #b42318; }
+  .status-5xx { background: #fee4e2; color: #b42318; }
+
+  .meta-item { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .meta-item span { color: var(--text); font-weight: 600; }
+
+  .response-body {
+    flex: 1; overflow-y: auto; padding: 16px;
+    font-family: var(--mono); font-size: 12px; line-height: 1.7;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .response-body::-webkit-scrollbar { width: 4px; }
+  .response-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .response-placeholder {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; color: var(--muted);
+  }
+  .response-placeholder .icon { font-size: 48px; opacity: 0.25; }
+  .response-placeholder p { font-size: 14px; }
+
+  .json-key { color: #0057ff; }
+  .json-string { color: #12b76a; }
+  .json-number { color: #d97706; }
+  .json-bool { color: #7c3aed; }
+  .json-null { color: #9ca3af; }
+
+  .resp-headers-list { display: flex; flex-direction: column; gap: 5px; font-family: var(--mono); font-size: 12px; }
+  .resp-header-row {
+    display: flex; gap: 12px; padding: 7px 10px;
+    border-radius: 6px; background: var(--surface2); border: 1px solid var(--border);
+  }
+  .resp-header-key { color: #0057ff; min-width: 180px; font-weight: 600; }
+  .resp-header-val { color: #12b76a; word-break: break-all; }
+
+  /* ── METHOD COLORS ── */
+  .method-GET    { background: #d1fadf; color: #027a48; }
+  .method-POST   { background: #dbeafe; color: #1d4ed8; }
+  .method-PUT    { background: #fef3c7; color: #b45309; }
+  .method-PATCH  { background: #fef9c3; color: #854d0e; }
+  .method-DELETE { background: #fee4e2; color: #b42318; }
+  .method-HEAD   { background: #f3e8ff; color: #6b21a8; }
+  .method-OPTIONS{ background: #f1f5f9; color: #475569; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+    backdrop-filter: blur(2px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px; width: 420px;
+    display: flex; flex-direction: column; gap: 16px;
+    box-shadow: var(--shadow-md);
+  }
+  .modal h3 { font-size: 16px; font-weight: 800; }
+  .modal input, .modal select {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--sans); font-size: 13px;
+    padding: 9px 12px; border-radius: 8px; outline: none; transition: border-color 0.15s;
+  }
+  .modal input:focus, .modal select:focus { border-color: var(--accent); }
+  .modal-footer { display: flex; gap: 10px; justify-content: flex-end; }
+  .btn-primary {
+    background: var(--accent); color: #fff; border: none;
+    font-family: var(--sans); font-size: 13px; font-weight: 700;
+    padding: 9px 20px; border-radius: 8px; cursor: pointer;
+  }
+  .btn-ghost {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    font-family: var(--sans); font-size: 13px; padding: 9px 16px;
+    border-radius: 8px; cursor: pointer;
+  }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--text); color: #fff;
+    padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    box-shadow: var(--shadow-md); opacity: 0; transform: translateY(8px);
+    transition: all 0.25s; pointer-events: none; z-index: 999;
+  }
+  .toast.show { opacity: 1; transform: none; }
+  .toast.error { background: var(--red); }
+  .toast.success { background: var(--green); }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">M<span>API</span></div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+    <div class="backend-status" id="backendStatus"></div>
+    <span style="font-size:12px;color:var(--muted);" id="backendLabel">Connecting...</span>
+    <button class="btn-icon" title="Test connection" onclick="pingBackend()" style="width:28px;height:28px;font-size:13px;">🔄</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">Collections</span>
+      <button class="btn-icon" title="New Request" onclick="openSaveModal(true)" style="margin-left:auto;">＋</button>
+    </div>
+    <div class="collection-list" id="collectionList"></div>
+    <div class="sidebar-footer">
+      <button class="btn-add-folder" onclick="openNewCollectionModal()">＋ New folder</button>
+    </div>
+  </div>
+
+  <!-- WORKSPACE -->
+  <div class="workspace">
+
+    <!-- URL BAR -->
+    <div class="url-bar">
+      <select class="method-select" id="methodSelect">
+        <option>GET</option><option>POST</option><option>PUT</option>
+        <option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option>
+      </select>
+      <input class="url-input" id="urlInput" type="text" placeholder="https://api.example.com/endpoint" />
+      <div class="spinner" id="spinner"></div>
+      <button class="btn-save" onclick="openSaveModal(false)">Save</button>
+      <button class="btn-send" id="sendBtn" onclick="sendRequest()">Send ▶</button>
+    </div>
+
+    <!-- SPLIT PANE -->
+    <div class="split-pane">
+
+      <!-- REQUEST PANEL -->
+      <div class="request-panel">
+        <div class="tabs" id="reqTabs">
+          <div class="tab active" data-tab="headers" onclick="switchTab('req','headers')">Headers</div>
+          <div class="tab" data-tab="body"    onclick="switchTab('req','body')">Body</div>
+          <div class="tab" data-tab="auth"    onclick="switchTab('req','auth')">Auth</div>
+          <div class="tab" data-tab="params"  onclick="switchTab('req','params')">Params</div>
+        </div>
+
+        <div class="tab-content active" id="req-headers">
+          <div class="kv-table" id="headersTable"></div>
+          <button class="btn-add-row" onclick="addKVRow('headersTable')">＋ Add Header</button>
+        </div>
+
+        <div class="tab-content" id="req-body">
+          <div class="body-type-row">
+            <button class="body-type-btn active" onclick="setBodyType('json',this)">JSON</button>
+            <button class="body-type-btn" onclick="setBodyType('form',this)">Form</button>
+            <button class="body-type-btn" onclick="setBodyType('raw',this)">Raw</button>
+            <button class="body-type-btn" onclick="setBodyType('none',this)">None</button>
+          </div>
+          <textarea class="body-textarea" id="bodyTextarea" placeholder='{\n  "key": "value"\n}'></textarea>
+        </div>
+
+        <div class="tab-content" id="req-auth">
+          <span class="section-label">Auth Type</span>
+          <div class="auth-type-row">
+            <button class="body-type-btn active" onclick="setAuthType('none',this)">None</button>
+            <button class="body-type-btn" onclick="setAuthType('bearer',this)">Bearer Token</button>
+            <button class="body-type-btn" onclick="setAuthType('apikey',this)">API Key</button>
+            <button class="body-type-btn" onclick="setAuthType('basic',this)">Basic Auth</button>
+          </div>
+          <div class="auth-fields" id="authFields"></div>
+        </div>
+
+        <div class="tab-content" id="req-params">
+          <div class="kv-table" id="paramsTable"></div>
+          <button class="btn-add-row" onclick="addKVRow('paramsTable')">＋ Add Param</button>
+        </div>
+      </div>
+
+      <!-- RESPONSE PANEL -->
+      <div class="response-panel">
+        <div class="tabs" id="resTabs">
+          <div class="tab active" data-tab="body"    onclick="switchTab('res','body')">Response Body</div>
+          <div class="tab" data-tab="headers" onclick="switchTab('res','headers')">Headers</div>
+        </div>
+        <div class="response-meta" id="responseMeta">
+          <span style="color:var(--muted);font-size:12px;">Hit Send to get a response</span>
+        </div>
+
+        <div class="tab-content active" id="res-body" style="padding:0;flex:1;">
+          <div class="response-placeholder" id="responsePlaceholder">
+            <div class="icon">⚡</div>
+            <p>Send a request to see the response</p>
+          </div>
+          <pre class="response-body" id="responseBody" style="display:none;"></pre>
+        </div>
+
+        <div class="tab-content" id="res-headers">
+          <div class="resp-headers-list" id="responseHeadersList"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- SAVE MODAL -->
+<div class="modal-overlay" id="saveModal">
+  <div class="modal">
+    <h3>💾 Save Request</h3>
+    <div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px;">Request Name</label>
+      <input id="saveReqName" placeholder="e.g. Get Users" />
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px;">Collection</label>
+      <select id="saveColSelect"></select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal('saveModal')">Cancel</button>
+      <button class="btn-primary" onclick="saveRequest()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW COLLECTION MODAL -->
+<div class="modal-overlay" id="newColModal">
+  <div class="modal">
+    <h3>📁 New Sub-Collection</h3>
+    <div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px;">Under Folder</label>
+      <select id="newColFolder"></select>
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px;">Sub-Collection Name</label>
+      <input id="newColName" placeholder="e.g. User APIs, Reports..." />
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal('newColModal')">Cancel</button>
+      <button class="btn-primary" onclick="createCollection()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────
+// !! REPLACE BOTH VALUES BELOW BEFORE USING !!
+const GATEWAY_URL = 'https://qknyl8fst0.execute-api.us-west-2.amazonaws.com/prod';  // e.g. https://abc123xyz.execute-api.us-east-1.amazonaws.com
+const GATEWAY_KEY = 'pw9aJ94jdb2MEiM3m5R6b7RscmnqrFCY4TWf7Hga';                                // e.g. aBcDeFgHiJ1234567890
+
+function getBackendUrl() {
+  return GATEWAY_URL.replace(/\/$/, '');
+}
+function getGatewayKey() {
+  return GATEWAY_KEY;
+}
+
+// ─── STATE ────────────────────────────────────────────
+// Fixed folder tree — driven by backend /folders endpoint
+// Structure: MAPI (root) > Data Analytics / Platform / Data Management / App Support
+// User can only create sub-collections inside these fixed folders
+
+const FIXED_FOLDERS = [
+  { id: 'data-analytics',  name: 'Data Analytics',  icon: '📊' },
+  { id: 'platform',        name: 'Platform',         icon: '⚙️'  },
+  { id: 'data-management', name: 'Data Management',  icon: '🗄️'  },
+  { id: 'app-support',     name: 'App Support',      icon: '🛠️'  },
+];
+
+// userCollections: { [folderId]: SubCollection[] }
+// Loaded from backend on page load, kept in sync on every save/delete
+let userCollections = {};
+
+let authType = 'none', bodyType = 'json';
+let activeRequestId = null, activeCollectionId = null, activeFolderId = null;
+let saveIsNew = false;
+
+// ─── BACKEND API HELPERS ──────────────────────────────
+async function apiGet(path) {
+  const r = await fetch(getBackendUrl() + path, {
+    headers: { 'x-api-key': getGatewayKey() }
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function apiPost(path, body) {
+  const r = await fetch(getBackendUrl() + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': getGatewayKey() },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function apiDelete(path, body) {
+  const r = await fetch(getBackendUrl() + path, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': getGatewayKey() },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// Load all collections from backend on startup
+async function loadAllCollections() {
+  try {
+    const res = await apiGet('/collections');
+    userCollections = res.data || {};
+    renderCollections();
+  } catch(e) {
+    showToast('Could not load collections: ' + e.message, 'error');
+    renderCollections();
+  }
+}
+
+// ─── UTILS ────────────────────────────────────────────
+function uid() { return Math.random().toString(36).slice(2,10); }
+
+
+function save() { localStorage.setItem('mapi_cols', JSON.stringify(collections)); }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 2800);
+}
+
+// ─── BACKEND PING ─────────────────────────────────────
+async function pingBackend() {
+  const dot = document.getElementById('backendStatus');
+  const lbl = document.getElementById('backendLabel');
+  dot.className = 'backend-status';
+  lbl.textContent = 'Checking...';
+  try {
+    const r = await fetch(getBackendUrl() + '/proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': getGatewayKey() },
+      body: JSON.stringify({ url: 'https://www.google.com', method: 'GET', headers: {}, body: null, timeout: 5 }),
+      signal: AbortSignal.timeout(8000)
+    });
+    if (r.status === 403) {
+      dot.className = 'backend-status err';
+      lbl.textContent = 'Invalid API Key (403)';
+    } else if (r.status === 200 || r.status === 502) {
+      // 200 = full success, 502 = lambda ran but target unreachable — both mean Lambda is UP
+      dot.className = 'backend-status ok';
+      lbl.textContent = 'Connected';
+    } else {
+      dot.className = 'backend-status ok';
+      lbl.textContent = 'Connected (' + r.status + ')';
+    }
+  } catch {
+    dot.className = 'backend-status err';
+    lbl.textContent = 'Unreachable — check GATEWAY_URL';
+  }
+}
+
+// ─── KV TABLES ────────────────────────────────────────
+function addKVRow(tableId, key='', val='') {
+  const table = document.getElementById(tableId);
+  const row = document.createElement('div');
+  row.className = 'kv-row';
+  row.innerHTML = `
+    <input type="text" placeholder="Key"   value="${escHtml(key)}" />
+    <input type="text" placeholder="Value" value="${escHtml(val)}" />
+    <button class="kv-delete" onclick="this.parentElement.remove()">×</button>
+  `;
+  table.appendChild(row);
+}
+function getKVRows(tableId) {
+  const res = {};
+  document.querySelectorAll(`#${tableId} .kv-row`).forEach(r => {
+    const [k, v] = r.querySelectorAll('input');
+    if (k.value.trim()) res[k.value.trim()] = v.value;
+  });
+  return res;
+}
+function clearKVTable(id) { document.getElementById(id).innerHTML = ''; }
+
+// ─── TABS ─────────────────────────────────────────────
+function switchTab(panel, name) {
+  const prefix = panel === 'req' ? 'req' : 'res';
+  const tabsId = panel === 'req' ? 'reqTabs' : 'resTabs';
+  document.querySelectorAll(`#${tabsId} .tab`).forEach(t => t.classList.remove('active'));
+  document.querySelectorAll(`[id^="${prefix}-"]`).forEach(c => c.classList.remove('active'));
+  document.querySelector(`#${tabsId} [data-tab="${name}"]`).classList.add('active');
+  document.getElementById(`${prefix}-${name}`).classList.add('active');
+}
+
+// ─── BODY TYPE ────────────────────────────────────────
+function setBodyType(type, btn) {
+  bodyType = type;
+  document.querySelectorAll('.body-type-row .body-type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const ta = document.getElementById('bodyTextarea');
+  ta.style.display = type === 'none' ? 'none' : 'block';
+  ta.placeholder = type === 'json' ? '{\n  "key": "value"\n}' : type === 'form' ? 'key=value&key2=value2' : 'Raw body...';
+}
+
+// ─── AUTH TYPE ────────────────────────────────────────
+function setAuthType(type, btn) {
+  authType = type;
+  document.querySelectorAll('.auth-type-row .body-type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const f = document.getElementById('authFields');
+  f.innerHTML = '';
+  if (type === 'bearer') {
+    f.innerHTML = `<div class="auth-field"><label>Bearer Token</label><input id="authToken" placeholder="eyJhbGci..." /></div>`;
+  } else if (type === 'apikey') {
+    f.innerHTML = `
+      <div class="auth-field"><label>Header Name</label><input id="authKeyName" placeholder="X-API-Key" value="X-API-Key"/></div>
+      <div class="auth-field"><label>API Key Value</label><input id="authKeyValue" placeholder="your-api-key" /></div>`;
+  } else if (type === 'basic') {
+    f.innerHTML = `
+      <div class="auth-field"><label>Username</label><input id="authUser" placeholder="username" /></div>
+      <div class="auth-field"><label>Password</label><input id="authPass" type="password" placeholder="password" /></div>`;
+  }
+}
+
+// ─── SEND REQUEST ─────────────────────────────────────
+async function sendRequest() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) { showToast('Please enter a URL', 'error'); return; }
+
+  const method  = document.getElementById('methodSelect').value;
+  const headers = getKVRows('headersTable');
+  const params  = getKVRows('paramsTable');
+
+  // Auth injection
+  if (authType === 'bearer') {
+    const tok = document.getElementById('authToken')?.value;
+    if (tok) headers['Authorization'] = `Bearer ${tok}`;
+  } else if (authType === 'apikey') {
+    const k = document.getElementById('authKeyName')?.value || 'X-API-Key';
+    const v = document.getElementById('authKeyValue')?.value;
+    if (v) headers[k] = v;
+  } else if (authType === 'basic') {
+    const u = document.getElementById('authUser')?.value || '';
+    const p = document.getElementById('authPass')?.value || '';
+    headers['Authorization'] = 'Basic ' + btoa(`${u}:${p}`);
+  }
+
+  // Build final URL with query params
+  let finalUrl = url;
+  const pe = Object.entries(params);
+  if (pe.length) {
+    finalUrl += (url.includes('?') ? '&' : '?') + pe.map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+  }
+
+  // Body
+  let body = undefined;
+  if (!['GET','HEAD'].includes(method) && bodyType !== 'none') {
+    body = document.getElementById('bodyTextarea').value;
+    if (bodyType === 'json' && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    if (bodyType === 'form' && !headers['Content-Type']) headers['Content-Type'] = 'application/x-www-form-urlencoded';
+  }
+
+  // UI: loading state
+  document.getElementById('sendBtn').disabled = true;
+  document.getElementById('spinner').style.display = 'block';
+  document.getElementById('responsePlaceholder').style.display = 'none';
+  document.getElementById('responseBody').style.display = 'none';
+  document.getElementById('responseMeta').innerHTML = '<span style="color:var(--muted);font-size:12px;">⏳ Sending via Python backend...</span>';
+
+  try {
+    // ── Call API Gateway → Lambda proxy ──
+    const proxyResp = await fetch(getBackendUrl() + '/proxy', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': getGatewayKey()
+      },
+      body: JSON.stringify({ url: finalUrl, method, headers, body })
+    });
+
+    const data = await proxyResp.json();
+
+    if (!proxyResp.ok) throw new Error(data.detail || 'Backend error');
+
+    const { status, status_text, headers: rh, body: rb, elapsed_ms, size_bytes } = data;
+
+    // Status bar
+    const cls = status < 300 ? 'status-2xx' : status < 400 ? 'status-3xx' : status < 500 ? 'status-4xx' : 'status-5xx';
+    document.getElementById('responseMeta').innerHTML = `
+      <span class="status-badge ${cls}">${status} ${escHtml(status_text)}</span>
+      <span class="meta-item">Time: <span>${elapsed_ms}ms</span></span>
+      <span class="meta-item">Size: <span>${(size_bytes/1024).toFixed(2)} KB</span></span>
+    `;
+
+    // Response body
+    const bodyEl = document.getElementById('responseBody');
+    bodyEl.style.display = 'block';
+    const ct = (rh['content-type'] || '');
+    if (ct.includes('json')) {
+      try { bodyEl.innerHTML = syntaxHighlight(JSON.stringify(JSON.parse(rb), null, 2)); }
+      catch { bodyEl.textContent = rb; }
+    } else { bodyEl.textContent = rb; }
+
+    // Response headers
+    const hl = document.getElementById('responseHeadersList');
+    hl.innerHTML = '';
+    Object.entries(rh).forEach(([k, v]) => {
+      const row = document.createElement('div');
+      row.className = 'resp-header-row';
+      row.innerHTML = `<span class="resp-header-key">${escHtml(k)}</span><span class="resp-header-val">${escHtml(String(v))}</span>`;
+      hl.appendChild(row);
+    });
+
+  } catch (err) {
+    document.getElementById('responseMeta').innerHTML = `<span class="status-badge status-5xx">Error</span>`;
+    const bodyEl = document.getElementById('responseBody');
+    bodyEl.style.display = 'block';
+    bodyEl.textContent = `Request failed:\n${err.message}\n\nThings to check:\n  1. GATEWAY_URL is set correctly in index.html\n  2. GATEWAY_KEY is set correctly in index.html\n  3. Lambda function is deployed and active\n  4. API Gateway trigger is attached to Lambda\n  5. x-api-key is linked to a Usage Plan`;
+    showToast('Request failed: ' + err.message, 'error');
+  } finally {
+    document.getElementById('sendBtn').disabled = false;
+    document.getElementById('spinner').style.display = 'none';
+  }
+}
+
+// ─── SYNTAX HIGHLIGHT ─────────────────────────────────
+function syntaxHighlight(json) {
+  return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, m => {
+    if (/^"/.test(m)) return /:$/.test(m) ? `<span class="json-key">${escHtml(m)}</span>` : `<span class="json-string">${escHtml(m)}</span>`;
+    if (/true|false/.test(m)) return `<span class="json-bool">${m}</span>`;
+    if (/null/.test(m))       return `<span class="json-null">${m}</span>`;
+    return `<span class="json-number">${m}</span>`;
+  });
+}
+
+// ─── COLLECTIONS ──────────────────────────────────────
+function renderCollections() {
+  const list = document.getElementById('collectionList');
+  list.innerHTML = '';
+
+  // MAPI root row
+  const rootRow = document.createElement('div');
+  rootRow.className = 'root-folder-label';
+  rootRow.innerHTML = `<span style="font-size:13px;">🏢</span><span style="font-weight:800;color:var(--accent);letter-spacing:-0.3px;">MAPI</span>`;
+  list.appendChild(rootRow);
+
+  // Fixed folder children
+  FIXED_FOLDERS.forEach(folder => {
+    const cols = userCollections[folder.id] || [];
+    renderFixedFolder(list, folder, cols);
+  });
+}
+
+function renderFixedFolder(container, folder, subCollections) {
+  const group = document.createElement('div');
+  group.className = 'dept-group';
+
+  const totalReqs = subCollections.reduce((n, c) => n + (c.requests||[]).length, 0);
+
+  const header = document.createElement('div');
+  header.className = 'dept-header open';
+  header.innerHTML = `
+    <span class="caret">▶</span>
+    <span style="font-size:13px;">${folder.icon}</span>
+    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;">${escHtml(folder.name)}</span>
+    <span class="dept-badge">${totalReqs}</span>
+  `;
+
+  const bodyEl = document.createElement('div');
+
+  header.onclick = () => {
+    header.classList.toggle('open');
+    bodyEl.style.display = header.classList.contains('open') ? 'block' : 'none';
+  };
+
+  // Sub-collections inside this fixed folder
+  subCollections.forEach(col => renderSubCollection(bodyEl, folder.id, col));
+
+  if (!subCollections.length) {
+    const hint = document.createElement('div');
+    hint.style.cssText = 'padding:5px 28px;font-size:11px;color:var(--muted);font-style:italic;';
+    hint.textContent = 'No sub-collections yet';
+    bodyEl.appendChild(hint);
+  }
+
+  group.appendChild(header);
+  group.appendChild(bodyEl);
+  container.appendChild(group);
+}
+
+function renderSubCollection(container, folderId, col) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'margin-left:12px;border-left:2px solid var(--border);margin-bottom:2px;';
+
+  const colHeader = document.createElement('div');
+  colHeader.className = 'dept-header open';
+  colHeader.style.cssText = 'padding-left:14px;font-size:12px;';
+  colHeader.innerHTML = `
+    <span class="caret" style="font-size:8px;">▶</span>
+    <span style="font-size:12px;">📂</span>
+    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(col.name)}</span>
+    <span class="dept-badge">${(col.requests||[]).length}</span>
+    <span class="col-del-btn" onclick="deleteSubCollection('${folderId}','${col.id}',event)">✕</span>
+  `;
+
+  const reqsEl = document.createElement('div');
+  colHeader.onclick = (e) => {
+    if (e.target.classList.contains('col-del-btn')) return;
+    colHeader.classList.toggle('open');
+    reqsEl.style.display = colHeader.classList.contains('open') ? 'block' : 'none';
+  };
+
+  (col.requests || []).forEach(req => {
+    const item = document.createElement('div');
+    item.className = 'request-item' + (req.id === activeRequestId ? ' active' : '');
+    item.style.paddingLeft = '32px';
+    item.innerHTML = `
+      <span class="method-badge method-${req.method}">${req.method}</span>
+      <span class="req-name">${escHtml(req.name)}</span>
+      <span class="del-btn" onclick="deleteRequestItem('${folderId}','${col.id}','${req.id}',event)">✕</span>
+    `;
+    item.onclick = () => loadRequestItem(folderId, col.id, req.id);
+    reqsEl.appendChild(item);
+  });
+
+  wrap.appendChild(colHeader);
+  wrap.appendChild(reqsEl);
+  container.appendChild(wrap);
+}
+
+// ── NEW COLLECTION MODAL ───────────────────────────────
+function openNewCollectionModal() {
+  // Populate folder dropdown with fixed folders only
+  const sel = document.getElementById('newColFolder');
+  if (sel) sel.innerHTML = FIXED_FOLDERS.map(f =>
+    `<option value="${f.id}">${f.icon} ${escHtml(f.name)}</option>`
+  ).join('');
+  if (sel && activeFolderId) sel.value = activeFolderId;
+  document.getElementById('newColName').value = '';
+  document.getElementById('newColModal').classList.add('open');
+  setTimeout(() => document.getElementById('newColName').focus(), 50);
+}
+
+async function createCollection() {
+  const name     = document.getElementById('newColName').value.trim();
+  const folderId = document.getElementById('newColFolder')?.value || FIXED_FOLDERS[0].id;
+  if (!name) return;
+  const newCol = { id: uid(), name, requests: [] };
+  try {
+    await apiPost('/collections', { folder_id: folderId, collection: newCol });
+    if (!userCollections[folderId]) userCollections[folderId] = [];
+    userCollections[folderId].push(newCol);
+    renderCollections();
+    closeModal('newColModal');
+    showToast('Sub-collection created ✓', 'success');
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function deleteSubCollection(folderId, colId, e) {
+  e.stopPropagation();
+  if (!confirm('Delete this sub-collection and all its requests?')) return;
+  try {
+    await apiDelete('/collections', { folder_id: folderId, collection_id: colId });
+    userCollections[folderId] = (userCollections[folderId] || []).filter(c => c.id !== colId);
+    if (activeCollectionId === colId) { activeCollectionId = null; activeRequestId = null; }
+    renderCollections();
+    showToast('Deleted', 'success');
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ── SAVE REQUEST MODAL ────────────────────────────────
+function openSaveModal(isNew) {
+  saveIsNew = isNew;
+  // Build grouped options: Fixed Folder > Sub-collection
+  const sel = document.getElementById('saveColSelect');
+  let html  = '';
+  FIXED_FOLDERS.forEach(f => {
+    const cols = userCollections[f.id] || [];
+    if (cols.length) {
+      html += `<optgroup label="${f.icon} ${escHtml(f.name)}">`;
+      cols.forEach(c => {
+        html += `<option value="${f.id}||${c.id}">${escHtml(c.name)}</option>`;
+      });
+      html += `</optgroup>`;
+    }
+  });
+  if (!html) {
+    showToast('Create a sub-collection first using "+ New folder"', 'error');
+    return;
+  }
+  sel.innerHTML = html;
+  // Pre-select current active
+  if (activeFolderId && activeCollectionId) sel.value = `${activeFolderId}||${activeCollectionId}`;
+  document.getElementById('saveReqName').value = isNew ? '' : (document.getElementById('urlInput').value.split('/').pop() || 'New Request');
+  document.getElementById('saveModal').classList.add('open');
+  setTimeout(() => document.getElementById('saveReqName').focus(), 50);
+}
+
+async function saveRequest() {
+  const name    = document.getElementById('saveReqName').value.trim();
+  const selVal  = document.getElementById('saveColSelect').value;
+  if (!name || !selVal) return;
+  const [folderId, colId] = selVal.split('||');
+  const reqData = captureState(name);
+
+  try {
+    await apiPost('/request/save', {
+      folder_id:     folderId,
+      collection_id: colId,
+      request_item:  reqData
+    });
+
+    // Update local state
+    const cols  = userCollections[folderId] || [];
+    const col   = cols.find(c => c.id === colId);
+    if (col) {
+      const idx = col.requests.findIndex(r => r.id === reqData.id);
+      if (idx > -1) col.requests[idx] = reqData; else col.requests.push(reqData);
+    }
+
+    activeRequestId    = reqData.id;
+    activeCollectionId = colId;
+    activeFolderId     = folderId;
+
+    renderCollections();
+    closeModal('saveModal');
+    showToast('Request saved ✓', 'success');
+  } catch(e) {
+    showToast('Save failed: ' + e.message, 'error');
+  }
+}
+function captureState(name) {
+  return {
+    id: (activeRequestId && !saveIsNew) ? activeRequestId : uid(),
+    name, method: document.getElementById('methodSelect').value,
+    url: document.getElementById('urlInput').value,
+    headers: getKVRows('headersTable'), params: getKVRows('paramsTable'),
+    body: document.getElementById('bodyTextarea').value,
+    bodyType, authType, authData: captureAuth()
+  };
+}
+function captureAuth() {
+  if (authType === 'bearer') return { token: document.getElementById('authToken')?.value };
+  if (authType === 'apikey') return { key: document.getElementById('authKeyName')?.value, val: document.getElementById('authKeyValue')?.value };
+  if (authType === 'basic')  return { user: document.getElementById('authUser')?.value, pass: document.getElementById('authPass')?.value };
+  return {};
+}
+function loadRequestItem(folderId, colId, reqId) {
+  const col = (userCollections[folderId] || []).find(c => c.id === colId);
+  const req = col?.requests?.find(r => r.id === reqId);
+  if (!req) return;
+  activeFolderId     = folderId;
+  activeCollectionId = colId;
+  activeRequestId    = reqId;
+  document.getElementById('methodSelect').value = req.method || 'GET';
+  document.getElementById('urlInput').value = req.url || '';
+  document.getElementById('bodyTextarea').value = req.body || '';
+  clearKVTable('headersTable'); Object.entries(req.headers||{}).forEach(([k,v]) => addKVRow('headersTable',k,v));
+  clearKVTable('paramsTable');  Object.entries(req.params||{}).forEach(([k,v]) => addKVRow('paramsTable',k,v));
+  const btBtns = document.querySelectorAll('.body-type-row .body-type-btn');
+  const btMap  = {json:0,form:1,raw:2,none:3};
+  bodyType     = req.bodyType || 'json';
+  btBtns.forEach(b => b.classList.remove('active'));
+  if (btBtns[btMap[bodyType]]) btBtns[btMap[bodyType]].classList.add('active');
+  document.getElementById('bodyTextarea').style.display = bodyType === 'none' ? 'none' : 'block';
+  const atBtns = document.querySelectorAll('.auth-type-row .body-type-btn');
+  const atMap  = {none:0,bearer:1,apikey:2,basic:3};
+  setAuthType(req.authType || 'none', atBtns[atMap[req.authType||'none']] || atBtns[0]);
+  const ad = req.authData || {};
+  if (req.authType==='bearer' && document.getElementById('authToken')) document.getElementById('authToken').value = ad.token||'';
+  if (req.authType==='apikey') { if(document.getElementById('authKeyName')) document.getElementById('authKeyName').value=ad.key||'X-API-Key'; if(document.getElementById('authKeyValue')) document.getElementById('authKeyValue').value=ad.val||''; }
+  if (req.authType==='basic')  { if(document.getElementById('authUser')) document.getElementById('authUser').value=ad.user||''; if(document.getElementById('authPass')) document.getElementById('authPass').value=ad.pass||''; }
+  renderCollections();
+}
+async function deleteRequestItem(folderId, colId, reqId, e) {
+  e.stopPropagation();
+  if (!confirm('Delete this request?')) return;
+  try {
+    await apiPost('/request/delete', { folder_id: folderId, collection_id: colId, request_id: reqId });
+    const col = (userCollections[folderId] || []).find(c => c.id === colId);
+    if (col) col.requests = (col.requests || []).filter(r => r.id !== reqId);
+    if (activeRequestId === reqId) activeRequestId = null;
+    renderCollections();
+    showToast('Request deleted', 'success');
+  } catch(err) {
+    showToast('Delete failed: ' + err.message, 'error');
+  }
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+document.querySelectorAll('.modal-overlay').forEach(el => el.addEventListener('click', e => { if (e.target===el) el.classList.remove('open'); }));
+document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key==='Enter') sendRequest(); });
+
+// ─── INIT ─────────────────────────────────────────────
+addKVRow('headersTable', 'Content-Type', 'application/json');
+addKVRow('headersTable', 'Accept', 'application/json');
+// Load collections from backend, then render
+loadAllCollections();
+pingBackend();
+</script>
+</body>
+</html>
